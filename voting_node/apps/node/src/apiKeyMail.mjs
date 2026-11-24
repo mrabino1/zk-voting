@@ -88,7 +88,7 @@ export function renderApiKeyCreatedEmail(input) {
     'Then sign in and revoke any key you do not recognize. A key you did not create can act as you, up to the authorization listed above.',
     '',
     'This message is not a vote receipt. Ballot choice is never included.',
-    'API-key mail is stored on the Node. It is never written to civic L2 transactions.',
+    'API-key mail is stored on the Node. It is never written on chain.',
     '',
     `— ${brandName()}`,
   ].join('\n');
@@ -133,7 +133,7 @@ export function renderApiKeyCreatedEmail(input) {
           <p style="margin:0 0 16px;">
             <a href="${escapeHtml(supportUrl)}" style="display:inline-block;background:#8a1c1c;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 16px;border-radius:4px;">Contact support</a>
           </p>
-          <p style="margin:20px 0 0;font-size:13px;line-height:1.45;color:#444444;">This message is not a vote receipt. Ballot choice is never included. API-key mail is stored on the Node and is never written to civic L2 transactions.</p>
+          <p style="margin:20px 0 0;font-size:13px;line-height:1.45;color:#444444;">This message is not a vote receipt. Ballot choice is never included. API-key mail is stored on the Node and is never written on chain.</p>
         </td>
       </tr>
     </table>

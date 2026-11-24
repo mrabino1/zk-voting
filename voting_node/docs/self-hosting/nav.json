@@ -21,7 +21,8 @@
         { "slug": "upgrading", "title": "Upgrading" },
         { "slug": "backups", "title": "Backups" },
         { "slug": "rollback", "title": "Rollback" },
-        { "slug": "rolling-updates", "title": "Rolling updates" }
+        { "slug": "rolling-updates", "title": "Rolling updates" },
+        { "slug": "forking", "title": "Forking and staying current" }
       ]
     },
     {

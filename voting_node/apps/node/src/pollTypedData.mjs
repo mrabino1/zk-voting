@@ -65,7 +65,7 @@ export function tokenPollTypedData({
   };
   // zkVotingChainId names this software. The signature is verified against
   // the token's Ethereum chain id in `domain.chainId`. Nothing is submitted
-  // to the civic L2 for an erc20_votes ballot.
+  // on chain for an erc20_votes ballot.
   if (votesMode) message.snapshotRoot = snapshotRoot;
   return {
     domain: {

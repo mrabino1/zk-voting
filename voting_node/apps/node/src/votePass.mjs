@@ -120,13 +120,21 @@ export function hashVotePassToken(tokenHex) {
   return createHash('sha256').update(`${VOTE_PASS_DOMAIN}:spent:${String(tokenHex).toLowerCase()}`, 'utf8').digest('hex');
 }
 
+/** Poll-book key: a domain-separated hash of the subject, so the store holds no raw user ids. */
+export function votePassIssueKey(electionId, subject) {
+  return createHash('sha256')
+    .update(`${VOTE_PASS_DOMAIN}:issued:${String(electionId)}\u0000${String(subject)}`, 'utf8')
+    .digest('hex');
+}
+
 /**
- * Vote-pass service. `issued` is in memory only: it caps one pass per signed-in
- * user / identity commitment per election per process without writing who
- * asked for a pass to disk. Spent passes are stored as a sorted set of hashes
- * (no order, no timestamp) by the store.
+ * Vote-pass service. One pass per signed-in user / identity commitment per
+ * election. With a store, issuance is a persisted poll book (who took a pass,
+ * never which pass: the signature is blind), so a restart cannot issue a second
+ * pass. Without one (unit tests) it is held in memory. Spent passes are stored
+ * as a sorted set of hashes (no order, no timestamp) by the store.
  */
-export function createVotePassService(config) {
+export function createVotePassService(config, { store = null } = {}) {
   let keyPromise = null;
   const issued = new Map();
 
@@ -152,14 +160,27 @@ export function createVotePassService(config) {
     return { alg: 'RSA-FDH-BLIND', domain: VOTE_PASS_DOMAIN, n: bigIntToHex(k.n), e: bigIntToHex(k.e) };
   }
 
-  function claimIssue(electionId, subject) {
+  function alreadyIssued() {
+    return new HttpError(409, 'a vote pass was already issued for this voter in this election', {
+      code: 'VOTE_PASS_ALREADY_ISSUED',
+    });
+  }
+
+  /** Refuse early when the voter already took a pass (checked again by claimIssue). */
+  function assertNotIssued(electionId, subject) {
     if (!subject) return;
-    const k = `${electionId}\u0000${subject}`;
-    if (issued.has(k)) {
-      throw new HttpError(409, 'a vote pass was already issued for this voter in this election', {
-        code: 'VOTE_PASS_ALREADY_ISSUED',
-      });
+    const k = votePassIssueKey(electionId, subject);
+    if (issued.has(k) || store?.votePassIssued?.(electionId, k)) throw alreadyIssued();
+  }
+
+  async function claimIssue(electionId, subject) {
+    if (!subject) return;
+    const k = votePassIssueKey(electionId, subject);
+    if (store?.recordVotePassIssue) {
+      if (!(await store.recordVotePassIssue(electionId, k))) throw alreadyIssued();
+      return;
     }
+    if (issued.has(k)) throw alreadyIssued();
     issued.set(k, true);
   }
 
@@ -195,7 +216,7 @@ export function createVotePassService(config) {
     return { token, signature: bigIntToHex(sig) };
   }
 
-  return { publicKey, claimIssue, signBlinded, verify, mintForTest };
+  return { publicKey, assertNotIssued, claimIssue, signBlinded, verify, mintForTest };
 }
 
 export function modInverse(a, m) {

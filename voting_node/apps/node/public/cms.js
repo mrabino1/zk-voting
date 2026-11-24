@@ -8,7 +8,7 @@ import { audienceOf, isOfficer, signInHref } from "./audience.js";
 import { logout } from "./signin.js";
 
 export const SHARED_DEPLOYMENT_NOTE =
-  "Fork this Node for a clerk desk. Do not deploy a new ElectionFactory for each jurisdiction. Pin the one shared factory, inbox, and verifier; officers update pages here.";
+  "Fork this Node for a clerk desk. Every jurisdiction settles civic votes on the one ZkVotingRollup contract on L1. Its address comes from ROLLUP_ADDRESS on the host, not from this page; officers update pages here.";
 
 function mount(node, ...children) {
   node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
@@ -47,7 +47,6 @@ export async function loadPublicCms(api) {
       nav: [],
       overlays: { home: null, about: null, faq: null },
       site: null,
-      contracts: null,
     };
   }
 }
@@ -133,7 +132,7 @@ function cmsSubnav(h, current) {
   const items = [
     { href: "/office/pages", id: "pages", label: "Pages" },
     { href: "/office/pages/new", id: "new", label: "New page" },
-    { href: "/office/site", id: "site", label: "Site & contracts" },
+    { href: "/office/site", id: "site", label: "Site" },
     { href: "/office", id: "hub", label: "Admin hub" },
   ];
   return h(
@@ -217,7 +216,7 @@ export async function renderOfficePages(main, ctx, bundle) {
       h(
         "p",
         { class: "lede" },
-        "Fork this Node for your jurisdiction. Keep the one shared ElectionFactory. The host edits About, FAQ, and home copy. Clerks publish pages tagged to their own jurisdiction — publish when ready."
+        "Fork this Node for your jurisdiction. Civic votes settle on the one shared rollup contract. The host edits About, FAQ, and home copy. Clerks publish pages tagged to their own jurisdiction — publish when ready."
       )
     ),
     cmsSubnav(h, "pages"),
@@ -225,7 +224,7 @@ export async function renderOfficePages(main, ctx, bundle) {
       "div",
       { class: "cta-row" },
       h("a", { class: "btn", href: "/office/pages/new", "data-nav": "", text: "New page" }),
-      h("a", { class: "btn btn-secondary", href: "/office/site", "data-nav": "", text: "Shared contracts" })
+      h("a", { class: "btn btn-secondary", href: "/office/site", "data-nav": "", text: "Site" })
     ),
     rows.length
       ? h(
@@ -455,14 +454,15 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
     return;
   }
 
-  let meta = { jurisdictions: [], canPinContracts: false };
+  let meta = { jurisdictions: [], canEditSite: false };
   try {
     meta = await api("/api/office/pages");
   } catch {
-    meta = { jurisdictions: [], canPinContracts: false };
+    meta = { jurisdictions: [], canEditSite: false };
   }
 
-  const canPin = Boolean(meta.canPinContracts);
+  // The Node host may edit unscoped pages; a clerk edits only their jurisdiction's.
+  const canPin = Boolean(meta.canEditSite);
   const clerkJids = meta.jurisdictions || [];
 
   let page = {
@@ -686,7 +686,7 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
 export async function renderOfficeSite(main, ctx, bundle) {
   const { h, setTitle, api, announce, route } = ctx;
   const { me } = bundle;
-  setTitle("Site & contracts");
+  setTitle("Site");
   const gate = clerkGate(h, ctx, me, route.path);
   if (gate === true) return;
   if (gate) {
@@ -706,77 +706,42 @@ export async function renderOfficeSite(main, ctx, bundle) {
   }
 
   const site = payload.site || {};
-  const contracts = site.contracts || {};
-  const pinned = contracts.pinnedByEnv || {};
-  const canPin = Boolean(payload.canPinContracts);
-  const statusEl = h("p", { class: "field-hint", text: site.updatedAt ? `Last saved ${site.updatedAt}.` : "Not saved yet." });
+  const rollup = site.rollup || {};
+  const canEdit = Boolean(payload.canEditSite);
+  const statusEl = h("p", { class: "field-hint", role: "status", text: site.updatedAt ? `Last saved ${site.updatedAt}.` : "Not saved yet." });
 
-  const titleInput = h("input", { type: "text", value: site.title || brandName(), id: "site-title", disabled: !canPin });
-  const taglineInput = h("textarea", { id: "site-tagline", rows: "3", disabled: !canPin });
+  const titleInput = h("input", { type: "text", value: site.title || brandName(), id: "site-title", disabled: !canEdit });
+  const taglineInput = h("textarea", { id: "site-tagline", rows: "3", disabled: !canEdit });
   taglineInput.value = site.tagline || "";
-  const factoryInput = h("input", {
-    type: "text",
-    value: contracts.factory || "",
-    id: "site-factory",
-    disabled: !canPin || pinned.factory,
-    spellcheck: "false",
-  });
-  const inboxInput = h("input", {
-    type: "text",
-    value: contracts.ballotInbox || "",
-    id: "site-inbox",
-    disabled: !canPin || pinned.ballotInbox,
-    spellcheck: "false",
-  });
-  const verifierInput = h("input", {
-    type: "text",
-    value: contracts.verifier || "",
-    id: "site-verifier",
-    disabled: !canPin || pinned.verifier,
-    spellcheck: "false",
-  });
 
   async function save(event) {
     event.preventDefault();
-    if (!canPin) {
-      statusEl.textContent = "Only the Node host (platform_admin) can change site identity and contract pins.";
+    if (!canEdit) {
+      statusEl.textContent = "Only the Node host (platform_admin) can change the site title and tagline.";
       announce(statusEl.textContent);
       return;
     }
-    const body = { title: titleInput.value, tagline: taglineInput.value };
-    body.contracts = {
-      factory: factoryInput.value.trim(),
-      ballotInbox: inboxInput.value.trim(),
-      verifier: verifierInput.value.trim(),
-    };
     try {
-      const updated = await api("/api/office/site", { method: "PATCH", body });
-      statusEl.textContent = "Saved. Forked Nodes should pin this same factory — do not deploy a new one.";
+      await api("/api/office/site", { method: "PATCH", body: { title: titleInput.value, tagline: taglineInput.value } });
+      statusEl.textContent = "Saved.";
       announce("Site saved");
-      const next = updated.site?.contracts || {};
-      factoryInput.value = next.factory || "";
-      inboxInput.value = next.ballotInbox || "";
-      verifierInput.value = next.verifier || "";
     } catch (err) {
       statusEl.textContent = err.message || "Save failed.";
       announce(err.message || "Save failed");
     }
   }
 
-  mount(main, 
+  const dlRow = (label, value) => [h("dt", { text: label }), h("dd", {}, value ? h("code", { text: String(value) }) : h("span", { class: "muted", text: "not set" }))];
+
+  mount(main,
     h(
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: "Shared deployment" }),
-      h("h1", { text: "Site identity and one contract" }),
-      h(
-        "p",
-        { class: "lede" },
-        "Jurisdictions fork this Node to run their own pages. The ElectionFactory, BallotInbox, and verifier stay the one shared deploy. Pin those addresses here when env is empty."
-      )
+      h("h1", { text: "Site identity" }),
+      h("p", { class: "lede", text: "Jurisdictions fork this Node to run their own pages. Civic votes from every jurisdiction settle on the same L1 contract." })
     ),
     cmsSubnav(h, "site"),
-    h("div", { class: "notice notice-warn", role: "note" }, h("p", { text: SHARED_DEPLOYMENT_NOTE })),
     h(
       "form",
       { class: "cms-editor", onSubmit: save },
@@ -786,40 +751,19 @@ export async function renderOfficeSite(main, ctx, bundle) {
         field(h, "Site title", titleInput),
         field(h, "Tagline", taglineInput, "Shown on overlays when you replace built-in copy.")
       ),
-      h("h2", { text: "Shared contract pin" }),
-      h(
-        "p",
-        {
-          text: canPin
-            ? "You are the Node host. Paste the existing factory. Do not run DeployLocal again for a new city."
-            : "Only the Node host (platform_admin) can change site title, tagline, and contract addresses.",
-        }
-      ),
-      h(
-        "div",
-        { class: "panel stack" },
-        field(
-          h,
-          "ElectionFactory",
-          factoryInput,
-          pinned.factory ? "Locked by ELECTION_FACTORY_ADDRESS on this process." : "0x… from the shared deploy."
-        ),
-        field(
-          h,
-          "BallotInbox",
-          inboxInput,
-          pinned.ballotInbox ? "Locked by BALLOT_INBOX_ADDRESS on this process." : ""
-        ),
-        field(
-          h,
-          "Verifier",
-          verifierInput,
-          pinned.verifier ? "Locked by VERIFIER_ADDRESS on this process." : "Often MockVerifier on test/unstable."
-        )
-      ),
-      h("p", { text: `Pin source: ${contracts.source || "unset"}. Chain id ${contracts.chainId ?? "—"}.` }),
-      h("button", { class: "btn", type: "submit", text: "Save site" }),
+      canEdit ? null : h("p", { class: "field-hint", text: "Only the Node host (platform_admin) can change the site title and tagline." }),
+      h("button", { class: "btn", type: "submit", text: "Save site", disabled: !canEdit }),
       statusEl
-    )
+    ),
+    h("h2", { text: "Rollup contract" }),
+    h("p", { text: rollup.configured ? "This Node is connected to ZkVotingRollup. The address is set by the host and cannot be changed here." : "This Node is not connected to a rollup yet. Polls work; civic votes need ROLLUP_ADDRESS and L1_RPC on the host." }),
+    h(
+      "dl",
+      { class: "status-dl", id: "site-rollup" },
+      ...dlRow("ZkVotingRollup", rollup.address),
+      ...dlRow("L1 chain id", rollup.chainId),
+      ...dlRow("Jurisdiction id", rollup.jurisdictionId)
+    ),
+    h("div", { class: "notice", role: "note" }, h("p", { text: SHARED_DEPLOYMENT_NOTE }))
   );
 }

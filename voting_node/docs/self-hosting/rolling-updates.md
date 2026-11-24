@@ -6,8 +6,9 @@ A rolling update starts the new container, waits until it is healthy, then stops
 
 ## How it stays safe
 
-- Old and new containers mount the **same** `node-data` and `l2-data` volumes.
-- Every stateful process (Node store, sequencer, prover, archive) takes a file **writer lease** before writing.
+- Old and new Node containers mount the **same** `node-data` volume.
+- The Node takes a file **writer lease** before writing.
+- The L2 operator has no writer lease, so it is not overlapped: recreate its container instead. While it is down the Node answers ballot requests with 503 and voters retry.
 - The new container starts in **standby**: `/health` returns HTTP 200 with `"mode":"standby"`. It serves reads and answers writes with HTTP 503 `maintenance handover` and `Retry-After: 2`. The web app retries those automatically.
 - On `SIGTERM` the old container flushes, releases the lease, and exits within `stop_grace_period: 30s`. The standby takes over. If the old one crashes, the lease expires after `WRITER_LEASE_TTL_MS` (default 8 seconds).
 
@@ -17,9 +18,8 @@ A rolling update starts the new container, waits until it is healthy, then stops
 | --- | --- |
 | Strategy | Rolling update (start new, wait healthy, stop old) |
 | Node health | `http://127.0.0.1:3000/health`, HTTP 200 |
-| L2 health | `http://127.0.0.1:8546/health`, HTTP 200 |
 | Grace period | 30 seconds |
-| Volumes | The existing `node-data` and `l2-data`, not new volumes |
+| Volumes | The existing `node-data`, not a new volume |
 
 Never require `mode=active` in a probe.
 
@@ -30,14 +30,13 @@ Never require `mode=active` in a probe.
 
 ## Try it locally
 
-`docker-compose.rolling.yml` starts a second Node (`node-next`, port 3001) and sequencer (`l2-next`, port 8547) on the same volumes:
+`docker-compose.rolling.yml` starts a second Node (`node-next`, port 3001) on the same volume:
 
 ```bash
 docker compose up -d --build     # the normal stack first
-docker compose -f docker-compose.yml -f docker-compose.rolling.yml up -d --no-build l2-next node-next
-curl -fsS http://127.0.0.1:8547/health   # "mode":"standby"
+docker compose -f docker-compose.yml -f docker-compose.rolling.yml up -d --no-build node-next
 curl -fsS http://127.0.0.1:3001/health   # "mode":"standby"
-docker compose stop node l2              # the -next pair takes the leases
+docker compose stop node                 # node-next takes the lease
 ```
 
-Failure modes, fencing, and the one-time L1 deploy: `docs/ROLLING_UPDATES.md`.
+Failure modes and fencing: `docs/ROLLING_UPDATES.md`.

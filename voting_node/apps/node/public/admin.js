@@ -157,14 +157,7 @@
       const merged = { ...config, ...health };
       const ok = pick(merged, ["ok"]) !== false && pick(merged, ["status"]) !== "down";
       const chainId = pick(merged, ["chainId", "chain_id"]);
-      const factory = pick(merged, [
-        "electionFactoryAddress",
-        "factoryAddress",
-        "factory",
-        "addresses.factory",
-        "contracts.ElectionFactory",
-        "contracts.factory",
-      ]);
+      const factory = pick(merged, ["rollup.address"]);
       const nfp = pick(merged, ["nfp", "notForProfit"]) !== false;
       healthEl.innerHTML = ok
         ? '<span class="status-dot on"></span>OK'

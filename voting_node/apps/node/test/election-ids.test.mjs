@@ -11,18 +11,17 @@ import {
   SHORT_CODE_LENGTH,
   UUID_V4_RE,
   UUID_V5_RE,
-  chainElectionId,
+  localElectionIdOf,
   electionMatchesRef,
   isShortCodeShape,
   isUuid,
   mintScopedPublicId,
   mintShortCode,
   mintUuid,
-  parseOnChainElectionId,
+  parseLocalElectionId,
   publicIdMatchesScope,
   refsOf,
   uuidVersion,
-  l1IdentityOf,
 } from '../src/electionIds.mjs';
 import { emptyTree } from '../src/merkle.mjs';
 import { parseRoute } from '../public/router.js';
@@ -130,95 +129,35 @@ describe('election UUID + short code', () => {
     assert.equal(isUuid('not-a-uuid'), false);
   });
 
-  test('scoped public ids bind UUID v5 to factory + jurisdiction; a copy fails', () => {
-    const factory = `0x${'11'.repeat(20)}`;
-    const north = mintScopedPublicId({
-      factoryAddress: factory,
-      chainId: 27427,
-      onChainElectionId: '1',
-      jurisdictionId: 'north',
-    });
-    const south = mintScopedPublicId({
-      factoryAddress: factory,
-      chainId: 27427,
-      onChainElectionId: '1',
-      jurisdictionId: 'south',
-    });
+  test('scoped public ids bind UUID v5 to node + jurisdiction; a copy fails', () => {
+    const north = mintScopedPublicId({ nodeId: 'node-a', localElectionId: '1', jurisdictionId: 'north' });
+    const south = mintScopedPublicId({ nodeId: 'node-a', localElectionId: '1', jurisdictionId: 'south' });
     assert.match(north, UUID_V5_RE);
     assert.match(south, UUID_V5_RE);
     assert.notEqual(north, south);
     assert.equal(uuidVersion(north), 5);
-    assert.equal(
-      publicIdMatchesScope(north, {
-        factoryAddress: factory,
-        chainId: 27427,
-        onChainElectionId: '1',
-        jurisdictionId: 'north',
-      }),
-      true,
-    );
-    assert.equal(
-      publicIdMatchesScope(north, {
-        factoryAddress: factory,
-        chainId: 27427,
-        onChainElectionId: '1',
-        jurisdictionId: 'south',
-      }),
-      false,
-    );
-    const demoA = mintScopedPublicId({
-      nodeId: 'node-a',
-      jurisdictionId: 'demo',
-      onChainElectionId: '1',
-    });
-    const demoB = mintScopedPublicId({
-      nodeId: 'node-b',
-      jurisdictionId: 'demo',
-      onChainElectionId: '1',
-    });
+    assert.equal(publicIdMatchesScope(north, { nodeId: 'node-a', localElectionId: '1', jurisdictionId: 'north' }), true);
+    assert.equal(publicIdMatchesScope(north, { nodeId: 'node-a', localElectionId: '1', jurisdictionId: 'south' }), false);
+    const demoA = mintScopedPublicId({ nodeId: 'node-a', jurisdictionId: 'demo', localElectionId: '1' });
+    const demoB = mintScopedPublicId({ nodeId: 'node-b', jurisdictionId: 'demo', localElectionId: '1' });
     assert.notEqual(demoA, demoB);
-  });
-
-  test('l1IdentityOf uses the pinned factory and separates jurisdictions', () => {
-    const pin = `0x${'11'.repeat(20)}`;
-    const north = l1IdentityOf(
-      { id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01', onChainElectionId: '1', jurisdictionId: 'north' },
-      { electionFactoryAddress: pin },
-    );
-    const south = l1IdentityOf(
-      { id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01', onChainElectionId: '1', jurisdictionId: 'south' },
-      { electionFactoryAddress: pin },
-    );
-    assert.equal(north.factory.toLowerCase(), pin);
-    assert.equal(south.factory.toLowerCase(), pin);
-    assert.notEqual(north.certificationId, south.certificationId);
-    const otherFactory = l1IdentityOf(
-      {
-        id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01',
-        onChainElectionId: '1',
-        jurisdictionId: 'north',
-        factoryAddress: `0x${'22'.repeat(20)}`,
-      },
-      { electionFactoryAddress: pin },
-    );
-    assert.notEqual(north.certificationId, otherFactory.certificationId);
   });
 
   test('refs resolve UUID, short code, on-chain id, and legacy aliases', () => {
     const election = {
       id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01',
       shortCode: 'nbrdge2k3m',
-      onChainElectionId: '1',
+      localElectionId: '1',
       aliases: ['1'],
     };
     assert.equal(electionMatchesRef(election, election.id), true);
     assert.equal(electionMatchesRef(election, 'nbrdge2k3m'), true);
     assert.equal(electionMatchesRef(election, '1'), true);
     assert.equal(electionMatchesRef(election, 'missing'), false);
-    assert.equal(chainElectionId(election), '1');
+    assert.equal(localElectionIdOf(election), '1');
     assert.ok(refsOf(election).has(election.id));
-    assert.equal(parseOnChainElectionId('42'), '42');
-    assert.equal(parseOnChainElectionId(null), null);
+    assert.equal(parseLocalElectionId('42'), '42');
+    assert.equal(parseLocalElectionId(null), null);
   });
 
   test('SPA router treats /vote/:id, /v/:code, and /e/:code as the same page', () => {
@@ -251,8 +190,7 @@ describe('election UUID + short code', () => {
     assert.equal(json.id, json.election.id);
     assert.equal(isShortCodeShape(json.shortCode), true);
     assert.equal(json.election.shortCode, json.shortCode);
-    assert.match(String(json.onChainElectionId), /^\d+$/);
-    assert.equal(json.election.onChainElectionId, json.onChainElectionId);
+    assert.match(String(json.election.localElectionId), /^\d+$/);
     assert.equal(json.election.links.vote, `/vote/${json.election.id}`);
     assert.equal(json.election.links.short, `/v/${json.shortCode}`);
     assert.match(json.election.id, UUID_V5_RE);
@@ -260,7 +198,7 @@ describe('election UUID + short code', () => {
 
     const byUuid = await api('GET', `/api/elections/${json.election.id}`);
     const byShort = await api('GET', `/api/elections/${json.shortCode}`);
-    const byChain = await api('GET', `/api/elections/${json.onChainElectionId}`);
+    const byChain = await api('GET', `/api/elections/${json.election.localElectionId}`);
     assert.equal(byUuid.status, 200);
     assert.equal(byUuid.json.id, json.election.id);
     assert.equal(byShort.status, 400);
@@ -329,7 +267,7 @@ describe('election UUID + short code', () => {
         proof: { accept: true },
         publicInputs: {
           nullifier: '8',
-          electionId: created.json.onChainElectionId,
+          electionId: created.json.election.localElectionId,
         },
         identityCommitment: '0xabc1',
         encryptedBallot: '0xcd',
@@ -385,12 +323,11 @@ describe('election UUID + short code', () => {
     assert.notEqual(a.json.election.id, stolen);
     assert.notEqual(b.json.election.id, stolen);
     assert.notEqual(a.json.election.id, b.json.election.id);
-    assert.notEqual(a.json.onChainElectionId, b.json.onChainElectionId);
-    assert.notEqual(a.json.election.certificationId, b.json.election.certificationId);
-    assert.notEqual(String(a.json.election.factoryAddress || '').toLowerCase(), `0x${'99'.repeat(20)}`);
+    assert.notEqual(a.json.election.localElectionId, b.json.election.localElectionId);
+    assert.equal(a.json.election.factoryAddress, undefined);
   });
 
-  test('client-supplied onChainElectionId is ignored in demo mode', async () => {
+  test('client-supplied localElectionId is ignored', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -398,29 +335,18 @@ describe('election UUID + short code', () => {
         startTime: nowSec() - 30,
         cutoffTime: nowSec() + 3600,
         treeDepth: 16,
-        onChainElectionId: '999999',
+        localElectionId: '999999',
         questions: [{ type: 'YES_NO', prompt: '?' }],
       },
     });
     assert.equal(created.status, 201, created.json?.error);
-    assert.notEqual(String(created.json.onChainElectionId), '999999');
+    assert.notEqual(String(created.json.election.localElectionId), '999999');
   });
 
-  test('legacy UUID v4 fails publicIdMatchesScope once a factory is pinned', () => {
+  test('legacy UUID v4 ids still match their scope', () => {
     const v4 = mintUuid();
     assert.equal(uuidVersion(v4), 4);
-    assert.equal(
-      publicIdMatchesScope(v4, {
-        factoryAddress: `0x${'11'.repeat(20)}`,
-        onChainElectionId: '1',
-        jurisdictionId: 'demo',
-      }),
-      false,
-    );
-    assert.equal(
-      publicIdMatchesScope(v4, { jurisdictionId: 'demo', onChainElectionId: '1' }),
-      true,
-    );
+    assert.equal(publicIdMatchesScope(v4, { jurisdictionId: 'demo', localElectionId: '1' }), true);
   });
 
   test('legacy non-UUID election ids still resolve after short-code backfill', () => {
@@ -459,64 +385,35 @@ describe('election UUID + short code', () => {
     assert.ok(legacy);
     assert.equal(String(legacy.id), '7');
     assert.equal(isShortCodeShape(legacy.shortCode), true);
-    assert.equal(legacy.onChainElectionId, '7');
+    assert.equal(legacy.localElectionId, '7');
     assert.equal(store.getElection(legacy.shortCode).id, 7);
   });
 });
 
-describe('explorer ingest secret', () => {
-  let ingestTmp;
-  let ingestServer;
-  let ingestBase;
-
-  before(async () => {
-    ingestTmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-ingest-'));
-    const created = await createApp({
-      dataDir: ingestTmp,
-      allowDevLogin: true,
-      adminHandle: 'admin',
-      quiet: true,
-      port: 0,
-      disclosureIntervalSeconds: 0,
-      explorerIngestSecret: 'test-ingest-secret',
-    });
-    ingestServer = await listen(created.app);
-    ingestBase = `http://127.0.0.1:${ingestServer.address().port}`;
+describe('localElectionId rename', () => {
+  test('a stored onChainElectionId moves to localElectionId on load', async () => {
+    const { renameLocalElectionIds } = await import('../src/store.mjs');
+    const data = { elections: [{ id: 'a', onChainElectionId: '7' }, { id: 'b', localElectionId: '8' }, { id: 'c', onChainElectionId: '9', localElectionId: '10' }] };
+    assert.equal(renameLocalElectionIds(data), true);
+    assert.deepEqual(data.elections, [{ id: 'a', localElectionId: '7' }, { id: 'b', localElectionId: '8' }, { id: 'c', localElectionId: '10' }]);
+    assert.equal(renameLocalElectionIds(data), false);
   });
+});
 
-  after(async () => {
-    await new Promise((resolve, reject) => {
-      ingestServer.close((err) => (err ? reject(err) : resolve()));
-    });
-    await rm(ingestTmp, { recursive: true, force: true });
-  });
-
-  test('rejects ingest without the shared secret', async () => {
-    const res = await fetch(`${ingestBase}/api/explorer/ingest`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        source: 'zk-voting-l2',
-        outcomes: { tally: [{ electionId: '1', counts: [9, 9] }] },
-      }),
-    });
-    assert.equal(res.status, 401);
-  });
-
-  test('accepts ingest with the shared secret', async () => {
-    const res = await fetch(`${ingestBase}/api/explorer/ingest`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-zk-voting-ingest-secret': 'test-ingest-secret',
-      },
-      body: JSON.stringify({
-        source: 'zk-voting-l2',
-        outcomes: { register: [{ identityCommitment: '0xabc' }] },
-      }),
-    });
-    assert.equal(res.status, 200);
-    const json = await res.json();
-    assert.equal(json.ok, true);
+describe('retired chain state', () => {
+  test('load drops the old ballot queue, inbox payloads and sequencer-open fields', async () => {
+    const { dropRetiredChainState } = await import('../src/store.mjs');
+    const data = {
+      chainVoteQueue: [{ n: 1 }],
+      chainVoteDeadLetter: [],
+      chainBallotPayloads: [{ nullifier: '0x01' }],
+      heldChainBallots: [],
+      votes: [{ nullifier: '0x01' }],
+      elections: [{ id: 'a', l2OpenStatus: 'pending', l2OpenFingerprint: 'f' }, { id: 'b' }],
+    };
+    assert.equal(dropRetiredChainState(data), true);
+    assert.deepEqual(Object.keys(data).sort(), ['elections', 'votes']);
+    assert.deepEqual(data.elections, [{ id: 'a' }, { id: 'b' }]);
+    assert.equal(dropRetiredChainState(data), false);
   });
 });

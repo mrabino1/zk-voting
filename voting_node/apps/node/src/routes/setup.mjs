@@ -22,9 +22,12 @@
 //                                      shown read-only in setupStatus.site
 //   POST /api/setup/complete           super admin: mark setup finished
 //
-// Step 6 (L2 identity and L1 funding) reads GET /api/l2/identity?funding=1.
-// L2_UUID, L2_SALT, L2_ADMIN_SECRET and L1_SUBMITTER_PRIVATE_KEY live in env
-// only (./setup.sh or npm run l2:identity -- init); nothing here returns them.
+//   GET  /api/setup/rollup             super admin: step 6, the rollup
+//                                      connection (ZkVotingRollup address,
+//                                      L1 chain, node account and its L1
+//                                      balance, L2 operator reachability)
+//
+// ROLLUP_PRIVATE_KEY and L2_BALLOT_TOKEN live in env only; nothing here returns them.
 //
 // Once a super admin holds a sign-in factor, the admin endpoints answer 409
 // SETUP_ADMIN_EXISTS for ever. The admin endpoints always require a setup
@@ -300,6 +303,14 @@ export function setupRouter(deps) {
     }),
   );
 
+  router.get(
+    '/rollup',
+    requireSuperAdmin,
+    asyncHandler(async (_req, res) => {
+      res.json({ nfp: true, ...(await rollupSetupStatus(deps)) });
+    }),
+  );
+
   router.get('/entropy', requireSuperAdmin, (req, res) => {
     res.set('cache-control', 'no-store');
     const info = entropyInfo(config, store);
@@ -405,4 +416,51 @@ export function setupRouter(deps) {
   );
 
   return router;
+}
+
+// The node pays L1 gas to publish, close and finalize civic votes; voters never pay.
+// One publish-to-finalize cycle is a handful of transactions, so warn below ~20 of them.
+const GAS_PER_CALL = 300_000n;
+const MIN_CALLS = 20n;
+
+export function rollupFundingLevel({ balanceWei, gasPriceWei }) {
+  const perCall = BigInt(gasPriceWei) * GAS_PER_CALL;
+  const balance = BigInt(balanceWei);
+  const level = balance === 0n || balance < perCall ? 'empty' : balance < perCall * MIN_CALLS ? 'low' : 'ok';
+  return { level, balanceWei: balance.toString(), gasPriceWei: BigInt(gasPriceWei).toString(), callsLeft: perCall > 0n ? Number(balance / perCall) : null };
+}
+
+async function rollupSetupStatus(deps) {
+  const cfg = deps.config.rollup || {};
+  const client = deps.rollup?.client || null;
+  const out = {
+    configured: Boolean(deps.rollup?.enabled),
+    address: client?.address || cfg.address || null,
+    chainId: client?.chainId ?? cfg.chainId ?? null,
+    jurisdictionId: cfg.jurisdictionId || null,
+    nodeAccount: client?.account || null,
+    keySet: Boolean(String(cfg.privateKey || '').trim()),
+    l2Url: cfg.l2Url || null,
+    l2Reachable: null,
+    funding: null,
+    problems: [],
+  };
+  if (!cfg.address) out.problems.push('ROLLUP_ADDRESS is not set');
+  if (!cfg.l1Rpc) out.problems.push('L1_RPC is not set');
+  if (!out.keySet) out.problems.push('ROLLUP_PRIVATE_KEY is not set: the node cannot publish or finalize civic votes');
+  if (!cfg.jurisdictionId) out.problems.push('ROLLUP_JURISDICTION_ID is not set');
+  if (!client) return out;
+  try {
+    const bal = await client.accountBalance();
+    if (bal) out.funding = rollupFundingLevel(bal);
+  } catch (err) {
+    out.problems.push(`L1 unreachable: ${err?.shortMessage || err?.message || 'error'}`);
+  }
+  try {
+    out.l2Reachable = Boolean(await client.l2Status());
+  } catch {
+    out.l2Reachable = false;
+    out.problems.push('the L2 operator is unreachable at L2_URL');
+  }
+  return out;
 }

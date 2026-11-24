@@ -1,0 +1,263 @@
+[
+  {
+    "type": "function",
+    "name": "authChallenge",
+    "inputs": [
+      {
+        "name": "electionId",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "index",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "message",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "rX",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rY",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "decryptChallenge",
+    "inputs": [
+      {
+        "name": "electionId",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "option",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "index",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "pk",
+        "type": "uint256[2]",
+        "internalType": "uint256[2]"
+      },
+      {
+        "name": "c1",
+        "type": "uint256[2]",
+        "internalType": "uint256[2]"
+      },
+      {
+        "name": "d",
+        "type": "uint256[2]",
+        "internalType": "uint256[2]"
+      },
+      {
+        "name": "a",
+        "type": "uint256[2]",
+        "internalType": "uint256[2]"
+      },
+      {
+        "name": "b",
+        "type": "uint256[2]",
+        "internalType": "uint256[2]"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pokChallenge",
+    "inputs": [
+      {
+        "name": "electionId",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "index",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "cx",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "cy",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "rX",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rY",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "shareChallenge",
+    "inputs": [
+      {
+        "name": "electionId",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "dealer",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "recipient",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "share",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rX",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rY",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "error",
+    "name": "AlreadyCommitted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadCommitments",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadCommittee",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadPoint",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadSchnorr",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadShares",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadSignature",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadSubset",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ComplaintUnfounded",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DisputeOpen",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoDispute",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotEnoughGuardians",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotMember",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ShareDoesNotOpen",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SharesAlreadyPosted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TooEarly",
+    "inputs": []
+  }
+]

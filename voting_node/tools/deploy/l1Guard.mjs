@@ -1,75 +1,69 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// One-time L1 deploy guard. App containers do not import this to deploy;
-// they only read the addresses it prints.
+// One-time deploy guard for ZkVotingRollup, the one L1 contract. App containers never
+// deploy; they read ROLLUP_ADDRESS (or the record) and use it.
+//
+// The rule (same as scripts/deploy.sh): a set ROLLUP_ADDRESS, or a deployment record whose
+// rollup address has code on the chain, refuses another deploy unless FORCE_REDEPLOY=1.
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const PINNED_ADDRESS_KEYS = Object.freeze([
-  'SETTLEMENT_ADDRESS',
-  'VERIFIER_ADDRESS',
-  'L1_TALLY_MIRROR_ADDRESS',
-  'L1_SETTLEMENT_ADDRESS',
-  'ELECTION_FACTORY_ADDRESS',
-  'BALLOT_INBOX_ADDRESS',
-]);
+import { l1RpcHeaders, redactL1RpcAuth } from '../../l2/l1RpcAuth.js';
 
 const FORCE_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 export function isForceRedeploy(env = {}) {
   return FORCE_VALUES.has(String(env.FORCE_REDEPLOY || '').trim().toLowerCase());
 }
 
-export function filledAddressKeys(env = {}) {
-  return PINNED_ADDRESS_KEYS.filter((key) => String(env[key] || '').trim().length > 0);
-}
-
-export function recordHasDeployment(record) {
-  if (!record || record.deployed !== true) return false;
-  const addresses = record.addresses && typeof record.addresses === 'object' ? record.addresses : {};
-  return Object.values(addresses).some((value) => String(value || '').trim().length > 0);
+/** The rollup address a record names (Deploy.s.sol / DeployLocal.s.sol output), or null. */
+export function recordRollup(record) {
+  const value = String(record?.rollup || '').trim();
+  return ADDRESS_RE.test(value) ? value : null;
 }
 
 /**
- * @param {{ env?: Record<string, string|undefined>, record?: object|null }} input
+ * @param {{ env?: Record<string, string|undefined>, record?: object|null, recordHasCode?: boolean }} input
+ *        recordHasCode: whether the record's rollup address has code on the target chain
+ *        (a record left over from a wiped local chain does not block a deploy).
  */
-export function assessDeploy({ env = {}, record = null } = {}) {
-  const setKeys = filledAddressKeys(env);
-  const recordDeployed = recordHasDeployment(record);
+export function assessDeploy({ env = {}, record = null, recordHasCode = true } = {}) {
+  const pinned = String(env.ROLLUP_ADDRESS || '').trim();
+  const recorded = recordRollup(record);
+  const live = Boolean(recorded) && recordHasCode;
+  const blocked = Boolean(pinned) || live;
   const force = isForceRedeploy(env);
-  if ((setKeys.length > 0 || recordDeployed) && !force) {
+  if (blocked && !force) {
     return {
       ok: false,
       forced: false,
-      reason: setKeys.length > 0 ? 'address env already set' : 'deployment record exists',
-      setKeys,
-      recordDeployed,
+      reason: pinned ? 'ROLLUP_ADDRESS already set' : 'deployment record names a live rollup',
+      pinned: pinned || null,
+      recorded,
     };
   }
-  if (force && (setKeys.length > 0 || recordDeployed)) {
-    return {
-      ok: true,
-      forced: true,
-      warning:
-        'FORCE_REDEPLOY=1 overrides an existing L1 deployment. This can split the chain of record. Do not use on a live election.',
-      setKeys,
-      recordDeployed,
-    };
-  }
-  return { ok: true, forced: false, warning: null, setKeys, recordDeployed };
+  return {
+    ok: true,
+    forced: blocked && force,
+    warning: blocked && force
+      ? 'FORCE_REDEPLOY=1 deploys a second rollup. Every jurisdiction must then move to it; do not do this during a live election.'
+      : null,
+    pinned: pinned || null,
+    recorded,
+  };
 }
 
-export function formatEnvLines(addresses = {}) {
+export function formatEnvLines({ rollup, chainId } = {}) {
   const lines = [];
-  for (const key of PINNED_ADDRESS_KEYS) {
-    const value = String(addresses[key] || '').trim();
-    if (value) lines.push(`${key}=${value}`);
-  }
+  if (chainId != null && chainId !== '') lines.push(`L1_CHAIN_ID=${chainId}`);
+  if (rollup) lines.push(`ROLLUP_ADDRESS=${rollup}`);
   return lines.join('\n');
 }
 
-export function deploymentRecordPath(root, chainId) {
-  return path.join(root, 'deployments', `${chainId}.json`);
+/** smart-contracts/deployments/<chainId>.json, or local.json on 31337. */
+export function deploymentRecordPath(contractsDir, chainId) {
+  return path.join(contractsDir, 'deployments', String(chainId) === '31337' ? 'local.json' : `${chainId}.json`);
 }
 
 export function readDeploymentRecord(file) {
@@ -81,41 +75,32 @@ export function readDeploymentRecord(file) {
   }
 }
 
-export function writeDeploymentRecord(file, record) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(record, null, 2) + '\n');
-  fs.renameSync(tmp, file);
-}
-
-export async function verifyDeployedCode(rpcUrl, address, fetchImpl = fetch) {
+async function rpc(rpcUrl, method, params, fetchImpl, env = process.env) {
   const res = await fetchImpl(rpcUrl, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'eth_getCode',
-      params: [address, 'latest'],
-    }),
+    headers: l1RpcHeaders(env),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   });
   const body = await res.json();
-  if (body.error) {
-    throw new Error(body.error.message || 'eth_getCode failed');
-  }
-  const code = String(body.result || '');
-  if (!code || code === '0x' || code === '0x0') {
-    throw new Error(`no code at ${address}`);
-  }
+  if (body.error) throw new Error(redactL1RpcAuth(body.error.message || `${method} failed`, env));
+  return body.result;
+}
+
+export async function verifyDeployedCode(rpcUrl, address, fetchImpl = fetch, env = process.env) {
+  const code = String((await rpc(rpcUrl, 'eth_getCode', [address, 'latest'], fetchImpl, env)) || '');
+  if (!code || code === '0x' || code === '0x0') throw new Error(`no code at ${address}`);
   return code;
 }
 
-export async function verifyAddressSet(rpcUrl, addresses, fetchImpl = fetch) {
-  const checked = {};
-  for (const [key, value] of Object.entries(addresses)) {
-    const address = String(value || '').trim();
-    if (!address) continue;
-    checked[key] = await verifyDeployedCode(rpcUrl, address, fetchImpl);
+export async function hasCode(rpcUrl, address, fetchImpl = fetch, env = process.env) {
+  try {
+    await verifyDeployedCode(rpcUrl, address, fetchImpl, env);
+    return true;
+  } catch {
+    return false;
   }
-  return checked;
+}
+
+export async function chainIdOf(rpcUrl, fetchImpl = fetch, env = process.env) {
+  return Number(BigInt(await rpc(rpcUrl, 'eth_chainId', [], fetchImpl, env)));
 }

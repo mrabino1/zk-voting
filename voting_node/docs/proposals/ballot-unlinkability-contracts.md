@@ -1,5 +1,9 @@
 # Proposal: on-chain ballot unlinkability (contracts and circuits)
 
+> **Superseded (2026-11-23).** The contracts it targets (`BallotInbox`, `ElectionFactory`) were
+> replaced by ZkVotingRollup, which takes no identity commitment with a ballot. The remaining
+> on-chain gap is eligibility, to be proven by the rollup's batch circuit. Kept for history.
+
 Status: **proposal, not implemented.** `smart-contracts/` is hand-owned, so
 nothing here has been changed in code. The Node side of ballot unlinkability is
 done (see [`../OPERATOR.md`](../OPERATOR.md), "Ballot unlinkability"). What is

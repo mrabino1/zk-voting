@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Forked Node CMS + one shared factory pin + clean URLs (no .html).
+// Forked Node CMS + the one shared rollup contract + clean URLs (no .html).
 
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -9,12 +9,10 @@ import { after, before, describe, test } from 'node:test';
 
 import {
   SHARED_DEPLOYMENT_NOTE,
-  applySiteContractPins,
   canManagePages,
-  mergePublicContracts,
   navItemsFromPages,
   normalizeSlug,
-  sanitizeAddress,
+  publicSiteView,
   sanitizeBlock,
   sanitizeBlocks,
   sanitizeHref,
@@ -108,9 +106,6 @@ describe('cms helpers', () => {
     assert.equal(normalizeSlug('outcomes'), '');
     assert.equal(normalizeSlug('monitor'), '');
     assert.equal(normalizeSlug('o'), '');
-    assert.equal(sanitizeAddress('0x1111111111111111111111111111111111111111'), '0x1111111111111111111111111111111111111111');
-    assert.equal(sanitizeAddress('not-an-address'), null);
-    assert.equal(sanitizeAddress(''), '');
     const block = sanitizeBlock({
       type: 'paragraph',
       text: '<img src=x onerror=alert(1)>Hello',
@@ -125,31 +120,16 @@ describe('cms helpers', () => {
     assert.match(SHARED_DEPLOYMENT_NOTE, /Fork this Node/);
   });
 
-  test('env factory wins over site pin', () => {
-    const site = {
-      contracts: {
-        factory: '0x2222222222222222222222222222222222222222',
-        ballotInbox: '',
-        verifier: '',
-      },
-    };
-    const config = {
-      chainId: 27427,
-      envContracts: {
-        factory: '0x1111111111111111111111111111111111111111',
-        ballotInbox: '',
-        verifier: '',
-      },
-      electionFactoryAddress: '0x1111111111111111111111111111111111111111',
-    };
-    const merged = mergePublicContracts(config, site);
-    assert.equal(merged.factory, '0x1111111111111111111111111111111111111111');
-    assert.equal(merged.source, 'env');
-    assert.equal(merged.pinnedByEnv.factory, true);
-    const unset = { chainId: 1, envContracts: { factory: '', ballotInbox: '', verifier: '' } };
-    applySiteContractPins(unset, site);
-    assert.equal(unset.electionFactoryAddress, '0x2222222222222222222222222222222222222222');
-    assert.equal(mergePublicContracts(unset, site).source, 'site');
+  test('the site shows the env rollup address read-only', () => {
+    const view = publicSiteView({ title: '', tagline: '' }, {
+      rollup: { l1Rpc: 'http://127.0.0.1:8545', address: '0x1111111111111111111111111111111111111111', chainId: 31337, privateKey: '0xsecret' },
+    });
+    assert.equal(view.rollup.address, '0x1111111111111111111111111111111111111111');
+    assert.equal(view.rollup.chainId, 31337);
+    assert.equal(view.rollup.configured, true);
+    assert.equal(JSON.stringify(view).includes('0xsecret'), false);
+    assert.equal(publicSiteView(null, {}).rollup.configured, false);
+    assert.equal('contracts' in view, false);
   });
 
   test('nav items only from published custom pages', () => {
@@ -282,7 +262,8 @@ describe('pages HTTP CMS and clean URLs', () => {
     assert.match(pages.json.note, /Fork this Node/);
     const cfg = await api('GET', '/api/config');
     assert.equal(cfg.json.sharedDeployment, true);
-    assert.equal(cfg.json.contracts.sharedDeployment, true);
+    assert.equal(cfg.json.contracts, undefined);
+    assert.equal(typeof cfg.json.rollup.configured, 'boolean');
     const health = await api('GET', '/health');
     assert.equal(health.json.sharedDeployment, true);
   });
@@ -411,39 +392,27 @@ describe('pages HTTP CMS and clean URLs', () => {
     assert.equal(southPage.status, 201, southPage.json?.error);
   });
 
-  test('platform_admin pins shared factory; clerk cannot; invalid address 400', async () => {
-    const clerkPin = await api('PATCH', '/api/office/site', {
-      jar: northClerkJar,
-      body: { contracts: { factory: '0x3333333333333333333333333333333333333333' } },
-    });
-    assert.equal(clerkPin.status, 403);
-
+  test('platform_admin sets the site title; clerk cannot; contract addresses are not editable', async () => {
     const clerkTitle = await api('PATCH', '/api/office/site', {
       jar: northClerkJar,
       body: { title: 'Captured desk' },
     });
     assert.equal(clerkTitle.status, 403);
 
-    const bad = await api('PATCH', '/api/office/site', {
+    const pinAttempt = await api('PATCH', '/api/office/site', {
       jar: adminJar,
-      body: { contracts: { factory: 'not-an-address' } },
+      body: { contracts: { factory: '0x3333333333333333333333333333333333333333' } },
     });
-    assert.equal(bad.status, 400);
+    assert.equal(pinAttempt.status, 400);
+    assert.equal(pinAttempt.json.code, 'CONTRACTS_FROM_ENV');
 
-    const pin = await api('PATCH', '/api/office/site', {
+    const saved = await api('PATCH', '/api/office/site', {
       jar: adminJar,
-      body: {
-        title: 'Northbridge ZK-Voting',
-        tagline: 'Fork the Node, keep the factory.',
-        contracts: { factory: '0x3333333333333333333333333333333333333333' },
-      },
+      body: { title: 'Northbridge ZK-Voting', tagline: 'Fork the Node, share the rollup.' },
     });
-    assert.equal(pin.status, 200, pin.json?.error);
-    assert.equal(pin.json.site.contracts.factory.toLowerCase(), '0x3333333333333333333333333333333333333333');
-    assert.equal(pin.json.site.contracts.source, 'site');
-    const cfg = await api('GET', '/api/config');
-    assert.equal(cfg.json.electionFactoryAddress.toLowerCase(), '0x3333333333333333333333333333333333333333');
-    assert.equal(cfg.json.addresses.factory.toLowerCase(), '0x3333333333333333333333333333333333333333');
+    assert.equal(saved.status, 200, saved.json?.error);
+    assert.equal(saved.json.canEditSite, true);
+    assert.equal(saved.json.site.rollup.sharedDeployment, true);
     const site = await api('GET', '/api/site');
     assert.equal(site.json.title, 'Northbridge ZK-Voting');
   });

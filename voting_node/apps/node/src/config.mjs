@@ -1,6 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -304,9 +305,32 @@ export function resolveRequestWebAuthn(config, req = {}) {
   };
 }
 
-// TODO(#113): remove the ALLOW_REVOTE chain refusal once the inbox contracts accept a replacement ballot.
-export const ALLOW_REVOTE_CHAIN_CONFIGURED =
-  'ALLOW_REVOTE cannot be on while a chain is configured. The inbox accepts each nullifier once, so a replacement counted on the node cannot be recomputed from the chain. Leave ALLOW_REVOTE off until the inbox accepts replacements.';
+const { assertKeyAllowedOnChain, readDeployment } = createRequire(import.meta.url)('@zk-voting/chain-client');
+
+/**
+ * The node's rollup connection. Explicit env wins; ROLLUP_DEPLOYMENT_FILE (the record
+ * DeployLocal.s.sol writes, shared by Docker Compose) fills the address, chain and
+ * jurisdiction when they are unset. A public Anvil dev key is refused off chain 31337.
+ */
+export function resolveRollupConfig(env = process.env) {
+  const deployment = readDeployment(String(env.ROLLUP_DEPLOYMENT_FILE || '').trim());
+  const cfg = {
+    l1Rpc: env.L1_RPC || env.L1_RPC_URL || '',
+    chainId: Number(env.L1_CHAIN_ID || deployment?.chainId || 31337),
+    address: env.ROLLUP_ADDRESS || deployment?.rollup || '',
+    privateKey: env.ROLLUP_PRIVATE_KEY || '',
+    jurisdictionId: env.ROLLUP_JURISDICTION_ID || deployment?.jurisdictionId || '',
+    l2Url: env.L2_URL || 'http://l2:8546',
+    l2Token: env.L2_BALLOT_TOKEN || '',
+    // Optional bearer token. Blank sends no Authorization header. Never logged.
+    authToken: String(env.L1_RPC_AUTH_TOKEN || '').trim(),
+    // First L1 block to scan for rollup events (the outcomes monitor's L1 audit). Some RPCs
+    // refuse a log query from block 0.
+    fromBlock: /^\d+$/.test(String(env.ROLLUP_DEPLOY_BLOCK || '').trim()) ? String(env.ROLLUP_DEPLOY_BLOCK).trim() : '0',
+  };
+  assertKeyAllowedOnChain(cfg.privateKey, cfg.chainId, 'ROLLUP_PRIVATE_KEY');
+  return cfg;
+}
 
 /**
  * @param {Record<string, unknown>} [overrides]
@@ -341,22 +365,15 @@ export function getConfig(overrides = {}) {
     overrides.disclosureMinBlockVotes ?? process.env.DISCLOSURE_MIN_BLOCK_VOTES,
     { isTest },
   );
-  // Off until the inbox can store the latest ballot. The node must not count
-  // a replacement the chain still rejects.
+  // Polls: a later ballot under the same nullifier replaces the earlier one in the
+  // node's count. Off by default. Civic votes on the rollup refuse a second ballot
+  // until the eligibility proof binds a nullifier to its voter (routes/elections.mjs).
   const allowRevote = envFlag(
     Object.prototype.hasOwnProperty.call(overrides, 'allowRevote')
       ? overrides.allowRevote
       : process.env.ALLOW_REVOTE,
     false,
   );
-  const chainRpcConfigured = String(
-    Object.prototype.hasOwnProperty.call(overrides, 'chainRpc')
-      ? overrides.chainRpc ?? ''
-      : process.env.CHAIN_RPC ?? '',
-  ).trim();
-  if (allowRevote && chainRpcConfigured) {
-    throw new Error(ALLOW_REVOTE_CHAIN_CONFIGURED);
-  }
 
   const provingPath = envFlag(overrides.provingPath ?? process.env.ZK_VOTING_PROVING_PATH, false);
   const useMockVerifier = provingPath
@@ -409,43 +426,17 @@ export function getConfig(overrides = {}) {
     voteFqdn: authority.voteFqdn,
     origins: authority.origins,
     adminHandle: process.env.ADMIN_HANDLE || 'admin',
-    chainRpc: process.env.CHAIN_RPC || '',
-    rankedBatchGas: process.env.RANKED_BATCH_GAS || '',
-    ballotInboxAddress: process.env.BALLOT_INBOX_ADDRESS || '',
-    electionFactoryAddress: process.env.ELECTION_FACTORY_ADDRESS || process.env.FACTORY || '',
-    verifierAddress: process.env.VERIFIER_ADDRESS || process.env.VERIFIER || '',
-    clerkAddress: process.env.CLERK_ADDRESS || process.env.CLERK || '',
-    registrarAddress: process.env.REGISTRAR_ADDRESS || process.env.REGISTRAR || '',
-    disqualificationOfficerAddress:
-      process.env.DISQUALIFICATION_OFFICER_ADDRESS || process.env.DISQUALIFICATION_OFFICER || '',
-    tallyOperatorAddress: process.env.TALLY_OPERATOR_ADDRESS || process.env.TALLY_OPERATOR || '',
-    relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY || '',
-    // NODE_ENV=test never inherits operator L1 keys (CI / local Anvil leakage).
-    l1Rpc: isTest ? '' : process.env.L1_RPC || process.env.L1_RPC_URL || '',
     // Optional bearer token for an L1 RPC that requires auth. Blank sends no
     // Authorization header. Tests never inherit an operator token.
     l1RpcAuthToken: isTest ? '' : String(process.env.L1_RPC_AUTH_TOKEN || '').trim(),
-    l1TallyMirrorAddress: isTest
-      ? ''
-      : process.env.L1_TALLY_MIRROR_ADDRESS ||
-        process.env.TALLY_MIRROR_ADDRESS ||
-        process.env.TALLY_MIRROR ||
-        '',
-    l1PublisherPrivateKey: isTest
-      ? ''
-      : process.env.L1_PUBLISHER_PRIVATE_KEY || process.env.L1_PRIVATE_KEY || '',
-    l1SettlementAddress: isTest
-      ? ''
-      : process.env.L1_SETTLEMENT_ADDRESS || process.env.SETTLEMENT_ADDRESS || process.env.SETTLEMENT || '',
-    l1ChainId: isTest ? 0 : Number(process.env.L1_CHAIN_ID || 0),
+    // ZkVotingRollup (smart-contracts/docs/ROLLUP.md). Civic votes run there; polls stay here.
+    // NODE_ENV=test connects only when a test passes `overrides.rollup`.
+    rollup: overrides.rollup ?? (isTest ? null : resolveRollupConfig(process.env)),
     dataDir: process.env.DATA_DIR || path.join(PKG_ROOT, 'data'),
     // Postgres app state. Unset → JSON files in dataDir (dev fallback). The
     // test suite stays on JSON unless TEST_DATABASE_URL points at a scratch DB.
     databaseUrl: isTest ? process.env.TEST_DATABASE_URL || '' : process.env.DATABASE_URL || '',
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
-    l2CivicRpc: String(
-      overrides.l2CivicRpc !== undefined ? overrides.l2CivicRpc : process.env.L2_CIVIC_RPC || '',
-    ).trim(),
     allowDevLogin: (() => {
       if (process.env.NODE_ENV === 'production') return false;
       if (overrides.allowDevLogin !== undefined) return Boolean(overrides.allowDevLogin);
@@ -470,9 +461,6 @@ export function getConfig(overrides = {}) {
     credentialProviderId: String(
       overrides.credentialProviderId ?? process.env.CREDENTIAL_PROVIDER_ID ?? 'manual',
     ).trim() || 'manual',
-    explorerIngestSecret: String(
-      overrides.explorerIngestSecret ?? process.env.EXPLORER_INGEST_SECRET ?? '',
-    ).trim(),
     requireEmailMfa: (() => {
       if (overrides.requireEmailMfa !== undefined) return Boolean(overrides.requireEmailMfa);
       if (process.env.REQUIRE_EMAIL_MFA !== undefined && process.env.REQUIRE_EMAIL_MFA !== '') {
@@ -623,10 +611,6 @@ export function getConfig(overrides = {}) {
       : process.env.SUPER_ADMIN_STEP_UP_MS,
   );
   config.logLevel = LOG_LEVELS.includes(overrides.logLevel) ? overrides.logLevel : 'info';
-  config.archiveEnabled = envFlag(
-    overrides.archiveEnabled !== undefined ? overrides.archiveEnabled : process.env.ARCHIVE_ENABLED,
-    true,
-  );
   applySiteAdminConfig(config, overrides);
   delete config.entropy; // a test override copied by ...overrides; keep it out of dumps
   Object.defineProperty(config, 'entropyEnv', {

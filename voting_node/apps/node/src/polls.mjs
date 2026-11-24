@@ -925,8 +925,8 @@ async function finishTally(deps, actor, poll, ballots, math, withdrawnWeight, no
     l1Mirror: 'skipped',
     l1MirrorNote:
       poll.weightSource === WEIGHT_VOTES
-        ? 'erc20_votes is checked against Ethereum mainnet. It is not submitted to the civic L2 or L1TallyMirror.'
-        : 'L1TallyMirror.postResult keys a uint256 civic election id. A token poll id is not that slot. Mirroring would change the existing mirror contract, so phase 1 skips it.',
+        ? 'erc20_votes is checked against Ethereum mainnet. It is not anchored on L1.'
+        : 'Token poll results are not anchored on L1; ZkVotingRollup certifies civic votes only.',
   };
   poll.state = 'TALLIED';
   poll.resultHash = stored.resultHash;

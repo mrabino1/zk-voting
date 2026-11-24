@@ -2,6 +2,10 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
+> **Scope.** These figures measure the Node's **poll** path (ballots stored and disclosed on the Node).
+> They were taken before the rollup redesign; civic votes now go to the L2 operator and are not
+> covered here. The `l2-chain.json` sizes below are the Node's explorer log.
+
 This report lists figures produced by `tools/load/harness.mjs` against a ZK-Voting Node listening on `127.0.0.1`. Displayed latencies are rounded to 0.1 ms and throughputs to 0.01 ops/s. The JSON next to this file keeps the unrounded summaries. Nothing in the tables was filled in by hand.
 
 ## What ran
@@ -15,7 +19,7 @@ The harness drove HTTP:
 3. `POST /api/elections/:id/register` (voter) — pending civil review.
 4. `POST /api/elections/:id/registration-requests/:requestId/approve` (clerk).
 5. `POST /api/elections/:id/freeze` (clerk).
-6. `POST /api/elections/:id/vote` with a unique nullifier and `{ proof: { accept: true } }`. No session cookie, so the relay path does not attach the voter to the ballot. `CHAIN_RPC` was unset, so votes stayed on the JSON demo path.
+6. `POST /api/elections/:id/vote` with a unique nullifier and `{ proof: { accept: true } }`. No session cookie, so the relay path does not attach the voter to the ballot. Votes stayed on the Node (the poll path).
 7. `GET /api/elections/:id/summary` while the disclosure hour was still open.
 8. The harness then advanced that Node's `nowFn` by the disclosure interval plus 5 seconds (same clock the vote and disclosure routes use) and called `GET /api/elections/:id/summary`, `GET /api/elections/:id/ballots`, summary again, and `GET /api/explorer/blocks` with no `limit` query (the route default is 50 blocks). That is the hourly disclosure publish path without waiting 3600 seconds of wall clock.
 9. The harness set `cutoffTime` on the live store to one second before wall-clock now (the tally route compares cutoff to `Date.now()`, which `nowFn` does not move) and `POST /api/elections/:id/tally` with counts `[acceptedBallots, 0]`.

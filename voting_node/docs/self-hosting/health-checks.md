@@ -52,4 +52,4 @@ The image also installs `curl` and `wget`, because some platforms (Coolify) run 
 
 ## Monitoring
 
-Point an uptime monitor at `https://vote.example.org/health`. Alert on non-200 responses or `"ok": false`. Watch disk space on the `l2-data` volume; enable the [archive](./configuration.md#archive-s3--r2) to keep it bounded.
+Point an uptime monitor at `https://vote.example.org/health`. Alert on non-200 responses or `"ok": false`. Watch disk space on the `postgres-data` and `l2-data` volumes, and the L1 balances of the node and operator accounts (`/setup` step 6, `GET /api/setup/rollup`).

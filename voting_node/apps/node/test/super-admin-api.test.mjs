@@ -453,7 +453,7 @@ describe('platform super-admin API', { concurrency: false }, () => {
     assert.equal(store.data.runtime?.feedbackRateWindowSeconds, beforeWindow);
     const applied = await api('POST', '/api/_sa/v1/config', {
       headers: { authorization: `Bearer ${broad}` },
-      body: { feedbackRateWindowSeconds: 7200, logLevel: 'warn', archiveEnabled: false },
+      body: { feedbackRateWindowSeconds: 7200, logLevel: 'warn' },
     });
     assert.equal(applied.status, 200, applied.text);
     assert.equal(applied.json.config.feedbackRateWindowSeconds, 7200);
@@ -602,13 +602,6 @@ describe('platform super-admin API', { concurrency: false }, () => {
     });
     assert.equal(verify.status, 200, verify.text);
     assert.equal(verify.json.chainSealed, undefined);
-    const archive = await api('POST', '/api/_sa/v1/l2/archive', {
-      headers: { authorization: `Bearer ${broad}` },
-      body: {},
-    });
-    assert.equal(archive.status, 200, archive.text);
-    assert.equal(archive.json.chainSealed, false);
-    assert.equal(archive.text.includes('SECRET'), false);
 
     recordLog('warn', `marker-sa zksa_${'cd'.repeat(8)}_abcdefghijklmnopqrstuvwxyz0123456789 ${ADMIN_EMAIL}`);
     const logs = await api('GET', '/api/_sa/v1/logs', { headers: { authorization: `Bearer ${broad}` } });

@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Role-promotion mail is a Node operator notice. It is never a vote receipt
-// and must never be written onto civic L2 transactions.
+// and must never be written on chain.
 
 import { brandName } from './branding.mjs';
 import { ROLE_LABELS } from './roles.mjs';
@@ -163,7 +163,7 @@ function buildText({ copy, vars }) {
     `${copy.ctaLabel}: ${vars.officeUrl}`,
     '',
     'This message is about your operator role. It is not a vote receipt. Ballot choice is never included.',
-    'Promotion mail is stored on the Node. It is never written to civic L2 transactions.',
+    'Promotion mail is stored on the Node. It is never written on chain.',
     '',
     `— ${vars.product}`,
   ];
@@ -203,7 +203,7 @@ function buildHtml({ copy, vars }) {
           <p style="margin:20px 0 0;">
             <a href="${escapeHtml(vars.officeUrl)}" style="display:inline-block;background:#13294b;color:#f4f1ea;text-decoration:none;font-weight:700;padding:12px 16px;border-radius:4px;">${escapeHtml(copy.ctaLabel)}</a>
           </p>
-          <p style="margin:20px 0 0;font-size:13px;line-height:1.45;color:#444444;">This message is about your operator role. It is not a vote receipt. Ballot choice is never included. Promotion mail is stored on the Node and is never written to civic L2 transactions.</p>
+          <p style="margin:20px 0 0;font-size:13px;line-height:1.45;color:#444444;">This message is about your operator role. It is not a vote receipt. Ballot choice is never included. Promotion mail is stored on the Node and is never written on chain.</p>
         </td>
       </tr>
     </table>

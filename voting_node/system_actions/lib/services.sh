@@ -26,6 +26,11 @@ rpc_ok() {
     "$url" >/dev/null 2>&1
 }
 
+# Scheme and host only: provider RPC URLs often carry an API key in the path.
+redact_rpc() {
+  printf '%s' "$1" | sed -E 's#^([a-z]+://[^/]+).*#\1#'
+}
+
 cmd_data_status() {
   source_project_env
   echo
@@ -80,13 +85,14 @@ cmd_connectivity() {
   printf '%s%s%s\n' "$BLD" "Connectivity (from this machine)" "$RST"
   echo
 
-  local node_url l2_url chain_rpc l1_rpc l1_auth
+  local node_url l2_url l1_rpc l1_auth
   node_url="${ZK_VOTING_HEALTH_URL:-$HEALTH_URL}"
   l2_url="${ZK_VOTING_L2_HEALTH_URL:-$L2_HEALTH_URL}"
-  chain_rpc="${CHAIN_RPC:-}"
   l1_rpc="${L1_RPC:-}"
   # Trim only. An empty token sends no Authorization header. Never print it.
   l1_auth="$(printf '%s' "${L1_RPC_AUTH_TOKEN:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  # The Compose hostname is not resolvable from the host; Anvil is published on loopback.
+  [[ "$l1_rpc" == "http://l1:8545" ]] && l1_rpc="http://127.0.0.1:${L1_RPC_PORT:-8545}"
 
   if http_ok "$node_url"; then
     ok "  Node        reachable — $node_url"
@@ -95,29 +101,21 @@ cmd_connectivity() {
   fi
 
   if http_ok "$l2_url"; then
-    ok "  L2 health   reachable — $l2_url"
+    ok "  L2 operator reachable — $l2_url"
   else
-    warn "  L2 health   not reachable — $l2_url"
-  fi
-
-  if [[ -z "$chain_rpc" ]]; then
-    echo "  CHAIN_RPC   (unset — JSON-only demo)"
-  elif rpc_ok "$chain_rpc" || http_ok "$chain_rpc"; then
-    ok "  CHAIN_RPC   reachable — $chain_rpc"
-  else
-    warn "  CHAIN_RPC   not reachable — $chain_rpc"
+    warn "  L2 operator not reachable — $l2_url"
   fi
 
   if [[ -z "$l1_rpc" ]]; then
-    echo "  L1_RPC      (unset — tally-hash certification skipped)"
+    echo "  L1_RPC      (unset — civic votes cannot be published; polls still work)"
   elif rpc_ok "$l1_rpc" "$l1_auth" || http_ok "$l1_rpc" "$l1_auth"; then
-    ok "  L1_RPC      reachable — $l1_rpc"
+    ok "  L1_RPC      reachable — $(redact_rpc "$l1_rpc")"
   else
-    warn "  L1_RPC      not reachable — $l1_rpc"
+    warn "  L1_RPC      not reachable — $(redact_rpc "$l1_rpc")"
   fi
 
   echo
-  echo "  Pin factory / inbox / verifier in .env."
+  echo "  The rollup address is ROLLUP_ADDRESS (or ROLLUP_DEPLOYMENT_FILE) in .env."
   echo "  CLI: ./system_actions.sh 6   or   ./system_actions.sh connectivity"
   echo
 }

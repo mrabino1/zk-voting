@@ -4,7 +4,42 @@
 
 This pack lets an observer, losing candidate, or court **export public election artifacts** and **verify tally / uniqueness invariants offline** without the Node’s private database (`apps/node/data/zk-voting.json`). The Node is allowed to be down. Canonical truth is the chain; the Node may publish a convenience JSON pack of already-public fields.
 
-This is the roadmap auditor slice (item 10). It does **not** replace a Groth16 ceremony or Poseidon hasher.
+It does **not** replace a trusted-setup ceremony.
+
+---
+
+## Civic votes: `verify-rollup`
+
+A civic vote is audited from Ethereum alone. Give it an RPC, the ZkVotingRollup address and the
+L1 election id (`rollupElectionId`); it needs neither the Node nor the L2 operator:
+
+```bash
+node tools/auditor/cli.mjs verify-rollup --rpc "$L1_RPC" --rollup 0x… --election 4 [--from-block N]
+```
+
+When `L1_RPC_AUTH_TOKEN` is set, those L1 calls send `Authorization: Bearer <token>`. Leave it empty when the endpoint does not. The value is never logged.
+
+It re-derives what the contract checked (`tools/auditor/rollup.mjs`):
+
+| Check | How |
+| --- | --- |
+| `ballots.pubdata`, `ballots.count` | Decodes every executed batch's pubdata from its `commitBatch` calldata, counts the election's ballots once per nullifier (accepted forced ballots included, replacements counted once), and compares with the ballot count L1 stored at close. |
+| `key.joint` | The joint key equals the sum of the constant terms of the guardians' Feldman commitments (dealers in good standing). |
+| `floor` | **Withheld** exactly when the ballot count is below `minBallots`. |
+| `result.sum`, `result.hash` | The certified counts add up to the ballot count, and `keccak256(abi.encode(chainid, rollup, electionId, counts))` matches. |
+| `result.shares` | Every k-subset of the guardians who posted decryption shares (up to 64 subsets) opens the final encrypted sum to the certified counts. |
+
+The Node's public outcomes monitor (`/outcomes/:id`, `GET /api/outcomes/:id` → `verification.l1`) runs
+the same checks against L1 for every civic vote (cached once the vote is finished), so observers
+see them without installing anything. Set `ROLLUP_DEPLOY_BLOCK` on a public chain.
+
+Exit status `0` when every check passes, `2` when one fails. Before the vote closes it reports the
+ballots so far and skips the result checks. Nothing it reads can reveal a choice: it sees the final
+sum and the shares of it, never a ballot.
+
+---
+
+## Polls: bundles
 
 ---
 
@@ -36,13 +71,6 @@ node tools/auditor/cli.mjs verify --file bundle.json
 node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1 --out bundle.json
 node tools/auditor/cli.mjs verify-node --base http://127.0.0.1:3000 --election 1
 
-# Export from chain JSON-RPC (VoteAccepted logs)
-node tools/auditor/cli.mjs export-chain \
-  --rpc http://127.0.0.1:8545 \
-  --factory 0x… \
-  --election 1 \
-  --out bundle.json
-
 # Print a fixture that already satisfies the invariants
 node tools/auditor/cli.mjs fixture
 ```
@@ -70,9 +98,9 @@ GET /api/outcomes/:id
 4. Disclosed rows have no `choice` / `optionId` / `userId`.
 5. No linkage artifacts: non-empty `supersededHashes` or `generation != 1` fail. The pack shows one current ballot hash per nullifier.
 6. Receipts cannot prove choice (`coercion.receiptsProveChoice === false` when the field is present). If `coercion.policy` is present it must be `one-ballot-per-nullifier`.
-7. `startTime < cutoffTime`; NFP label; schema id. Contract addresses are included when known (chain export / configured Node); Node-only demo packs may omit them and still check uniqueness and tally.
+7. `startTime < cutoffTime`; NFP label; schema id. Contract addresses are included when known; Node-only packs may omit them and still check uniqueness and tally.
 
-The inbox rejects a second `submitVote` (`NullifierUsed`). The Node keeps one current `ballotHash` per nullifier, the latest. Double voting remains impossible. Auditors do not see a previous hash or a marker that ties two ballots together.
+The Node rejects a second ballot for a nullifier (`NULLIFIER_USED`) unless re-vote is enabled for a poll, and keeps one current `ballotHash` per nullifier. Double voting remains impossible. Auditors do not see a previous hash or a marker that ties two ballots together.
 
 ---
 
@@ -86,7 +114,7 @@ This is **not** MACI. Full collusion-resistant messaging remains later work.
 
 ## Threat model (auditor vs Node)
 
-A lying Node can omit or delay disclosure (hourly policy) or refuse to serve `/artifacts`. It cannot make `sum(counts) != inbox.acceptedBallots` succeed on chain, and it cannot invent a choice that is not in the ciphertext. Prefer `export-chain` when a JSON-RPC endpoint is available; use `export-node` as a convenience over already-public HTTP.
+A lying Node can omit or delay a poll's disclosure or refuse to serve `/artifacts`; a poll pack is only as good as the Node that serves it. A civic vote does not depend on the Node: `verify-rollup` reads L1 directly.
 
 The Node also hosts `/outcomes`, which runs `verifyAuditorBundle` plus freeze-root and L1 hash checks for every election and groups them before / during / after voting from chain status. That page is a convenience monitor, not a substitute for an independent export.
 

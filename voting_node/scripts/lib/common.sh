@@ -101,12 +101,42 @@ redact_url() {
   fi
 }
 
+# Trimmed L1_RPC_AUTH_TOKEN, or empty. Never printed.
+l1_rpc_auth_token() {
+  printf '%s' "${L1_RPC_AUTH_TOKEN:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+# Foundry reads ETH_RPC_HEADERS (comma-separated Name:value). Empty token leaves it alone.
+# A token that contains a comma would split into a second header, so that is refused
+# without printing the value.
+apply_l1_rpc_auth() {
+  local token header
+  token="$(l1_rpc_auth_token)"
+  [[ -n "$token" ]] || return 0
+  case "$token" in
+    *[,]*) die "L1_RPC_AUTH_TOKEN cannot contain a comma" ;;
+  esac
+  header="Authorization:Bearer ${token}"
+  if [[ -z "${ETH_RPC_HEADERS:-}" ]]; then
+    export ETH_RPC_HEADERS="$header"
+  elif [[ "$ETH_RPC_HEADERS" != *"Authorization:"* ]]; then
+    export ETH_RPC_HEADERS="${ETH_RPC_HEADERS},${header}"
+  fi
+}
+
 # rpc_call URL METHOD [PARAMS_JSON] -> prints .result, non-zero on failure.
+# Sends Authorization: Bearer when L1_RPC_AUTH_TOKEN is set. An empty token sends no header.
 rpc_call() {
-  local url="$1" method="$2" params="${3:-[]}" body
+  local url="$1" method="$2" params="${3:-[]}" body token
+  local -a hdr
   need curl
+  hdr=(-H 'content-type: application/json')
+  token="$(l1_rpc_auth_token)"
+  if [[ -n "$token" ]]; then
+    hdr+=(-H "Authorization: Bearer ${token}")
+  fi
   body="$(curl -fsS --connect-timeout "${RPC_CONNECT_TIMEOUT:-5}" --max-time "${RPC_TIMEOUT:-15}" \
-    -H 'content-type: application/json' \
+    "${hdr[@]}" \
     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$method\",\"params\":$params}" \
     "$url" 2>/dev/null)" || return 1
   if have jq; then

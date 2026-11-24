@@ -10,7 +10,7 @@
 | Small jurisdiction | 2 vCPU | 2 GB | 20 GB | A club, school, or town with thousands of voters. |
 | Large jurisdiction | 4+ vCPU | 4+ GB | 50+ GB SSD | Tens of thousands of voters; see `docs/LOAD_TEST.md`. |
 
-The production image boots with a 384 MB memory cap in CI. Leave headroom for the L2 sequencer and prover.
+The production image boots with a 384 MB memory cap in CI. Leave headroom for the L2 operator and, on the local stack, Anvil.
 
 ## Software
 
@@ -30,8 +30,7 @@ This is the default. With `DATABASE_URL` empty, the Node writes application stat
 | Path under `DATA_DIR` | What it holds |
 | --- | --- |
 | `zk-voting.json` | Accounts and passkeys, sessions, elections, registrations, ballots, receipts, ceremony metadata, site settings, plugin state. |
-| `l2-chain.json` | Explorer chain. |
-| `chain-vote-queue.json` | Ballot submission queue. On this backend that file is the live queue; a copy is also kept inside `zk-voting.json`. |
+| `l2-chain.json` | The explorer log (poll blocks). The name is historical. |
 | `receipt-pdf.secret` | Key for locked receipt and outcome PDFs. Created when `RECEIPT_PDF_SECRET` is empty. |
 | `vote-pass.key.json` | Vote-pass signing key. Created on first use when `VOTE_PASS_RSA_JWK` is empty. |
 
@@ -52,22 +51,23 @@ Percent-encode the password inside `DATABASE_URL` when it contains `:` `@` `/` `
 
 Running the Node without Compose, with `DATABASE_URL` empty, still uses the JSON files. That path is for local development. A Compose deploy uses Postgres.
 
-On boot the Node creates its tables (`zkv_*`) and applies idempotent migrations. From then on it stores the same records as rows: the store document, the explorer chain, the ballot queue, and secrets such as the receipt PDF key (`zkv_secrets`).
+On boot the Node creates its tables (`zkv_*`) and applies idempotent migrations. From then on it stores the same records as rows: the store document, the explorer log, and secrets such as the receipt PDF key (`zkv_secrets`).
 
-The first boot against an empty database imports three files from `DATA_DIR` once: `zk-voting.json` (the store, including any ballot-queue fields saved inside it), `l2-chain.json`, and `receipt-pdf.secret`. Later boots read the database. The files stay on disk as the leftover of that import. `chain-vote-queue.json` is not part of the import, so a queue that exists only in that sidecar is not carried over. `vote-pass.key.json` is not imported either; the first vote-pass on Postgres creates a new key in `zkv_secrets`.
+The first boot against an empty database imports three files from `DATA_DIR` once: `zk-voting.json` (the store), `l2-chain.json`, and `receipt-pdf.secret`. Later boots read the database. The files stay on disk as the leftover of that import. `vote-pass.key.json` is not imported either; the first vote-pass on Postgres creates a new key in `zkv_secrets`.
 
 `DATA_DIR` still holds ceremony artifacts (`ceremonies/`, `ceremony-inputs/`), plugin uploads (`plugins/`), and the writer lease (`leases/`). Mount a volume there when those files must survive a redeploy. A rolling update that overlaps two Node containers on one host shares that volume so they can take the writer lease, which is a lock on the local filesystem. Application state follows `DATABASE_URL` and remains in Postgres whether or not that volume is present.
 
 When `DATABASE_URL` is set and Postgres cannot be reached, `/health` returns HTTP 503 and `db.ok` is false.
 
-The L2 sequencer, prover, and archive keep chain data as files on the `l2-data` volume. That store is separate from the Node backend described here.
+The L2 operator keeps its state as a file on the `l2-data` volume, separate from the Node backend described here.
 
 ## Network
 
 | Port | Service | Expose publicly? |
 | --- | --- | --- |
 | 3000 | `node` web app and API | Only behind a TLS reverse proxy (Coolify, Caddy, nginx, Traefik) or the Tailscale sidecar. |
-| 8546 | `l2` JSON-RPC | No. Keep it on the Compose network or `127.0.0.1`. |
+| 8546 | `l2` operator API | No. Keep it on the Compose network or `127.0.0.1`; its public reads can be exposed on purpose with `L2_RPC_BIND`. |
+| 8545 | `l1` local chain (profile `local-l1`) | Never. Its test keys are public. |
 | 443 | your reverse proxy | Yes, for a public voting site. |
 
 ## Domain and HTTPS

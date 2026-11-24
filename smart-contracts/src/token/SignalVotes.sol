@@ -37,8 +37,7 @@ abstract contract SignalVotes {
     error TransferFailed();
     error Reentered();
 
-    uint256 internal constant _SECP256K1_HALF =
-        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
+    uint256 internal constant _SECP256K1_HALF = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     bytes32 internal constant _DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -116,13 +115,10 @@ abstract contract SignalVotes {
     }
 
     /// @notice Gasless delegation. The holder signs; anyone may submit. One nonce is shared with permit.
-    function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s)
-        external
-    {
+    function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external {
         if (block.timestamp > expiry) revert ExpiredSignature(expiry);
-        address signer = _recover(
-            _hashTypedData(keccak256(abi.encode(_DELEGATION_TYPEHASH, delegatee, nonce, expiry))), v, r, s
-        );
+        address signer =
+            _recover(_hashTypedData(keccak256(abi.encode(_DELEGATION_TYPEHASH, delegatee, nonce, expiry))), v, r, s);
         if (nonce != nonces[signer]) revert InvalidNonce();
         nonces[signer] = nonce + 1;
         _delegate(signer, delegatee);

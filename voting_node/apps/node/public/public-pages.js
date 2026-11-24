@@ -22,7 +22,7 @@ import { FAQ_ENTRIES, faqAnswerText } from "./faq.js";
 import { logout, mountSignInPanel } from "./signin.js";
 
 const DEMO_NOTE =
-  `This Node is a working demo on the test/unstable line. Local tests still use MockVerifier. Poseidon(2) matches the vote circuit and the passkey commitment, but the dev Groth16 key is UNTRUSTED — no ceremony. The passkey helper may show zk-voting-local-address. Tally that opens ballots uses Feldman t-of-n guardians (NON-PRODUCTION); homomorphic versus mixnet aggregation is not decided. ${brandName()} is not claiming this deploy is court-ready.`;
+  `This Node is a working demo. Civic votes settle on ZkVotingRollup, but the circuit that proves each batch is not built yet, so they run only on a local test chain with a mock batch verifier. Eligibility is checked by this Node (a blind vote pass), not yet proven in zero knowledge. Poll keys are UNTRUSTED (no ceremony), and the poll guardian tally is NON-PRODUCTION. ${brandName()} is not claiming this deploy is court-ready.`;
 
 function mount(node, ...children) {
   node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
@@ -180,7 +180,7 @@ function votingSteps(h, ctx) {
       icon: "ballot",
       accent: "green",
       title: "Cast a private ballot",
-      text: "Your device builds a zero-knowledge proof that you are eligible and have not voted yet. The ballot is accepted without revealing your choice.",
+      text: "Your choice is encrypted on your device, with proofs that it is one valid choice. It is sent without your sign-in, so nobody can tie it to you.",
       href: ctx.pollsEnabled ? "/polls" : "/elections",
       cta: ctx.pollsEnabled ? "Open polls" : "Elections",
     },
@@ -198,7 +198,7 @@ function votingSteps(h, ctx) {
       icon: "tally",
       accent: "red",
       title: "See the tally",
-      text: "After the poll closes, the published totals can be checked against the accepted ballots.",
+      text: "After the cutoff, a civic vote's guardians decrypt only the final sum, and Ethereum checks it. Anyone can re-check it from the outcomes page.",
       href: "/outcomes",
       cta: "Outcomes",
     },
@@ -322,7 +322,7 @@ export function renderAbout(main, ctx) {
     }),
     h("h2", { text: "Jurisdictions" }),
     h("p", {
-      text: "A jurisdiction is any body that needs a roll, a ballot, and a binding result: government, county, nation, union, board, cooperative. Nested districts are a registry concern. The same machinery is not limited to national general elections. Fork this Node to run your clerk desk; pin the one shared ElectionFactory instead of deploying a new contract.",
+      text: "A jurisdiction is any body that needs a roll, a ballot, and a binding result: government, county, nation, union, board, cooperative. Nested districts are a registry concern. The same machinery is not limited to national general elections. Fork this Node to run your clerk desk; civic votes settle on the one shared rollup contract, so no city deploys its own.",
     }),
     h("h2", { text: "License (AGPL)" }),
     h("p", {
@@ -531,8 +531,8 @@ export function renderOffice(main, ctx, bundle) {
     },
     {
       href: "/office/site",
-      title: "Shared contracts",
-      body: "Fork the UI; pin the one ElectionFactory. Do not deploy a new factory per jurisdiction.",
+      title: "Site",
+      body: "Site title and tagline. Every jurisdiction settles civic votes on the one shared rollup contract.",
       spa: true,
     },
   ];

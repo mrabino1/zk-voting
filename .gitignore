@@ -38,3 +38,4 @@ smart-contracts/lib/**/.git
 smart-contracts/lib/forge-std/test/
 smart-contracts/lib/forge-std/.github/
 smart-contracts/lib/forge-std/scripts/
+smart-contracts/deployments/local.json

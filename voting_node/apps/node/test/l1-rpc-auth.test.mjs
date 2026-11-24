@@ -1,97 +1,101 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Node L1 reads send Authorization only when L1_RPC_AUTH_TOKEN is set.
-// Civic L2 calls stay unauthenticated.
+// The node rollup client sends Authorization only when L1_RPC_AUTH_TOKEN is set.
+// An empty token, and a test process that does not pass one, send no header.
 
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { describe, test } from 'node:test';
 
-import { l2FundingStatus, readOutcomeFromL1, readOutcomeFromL2 } from '../src/l2Identity.mjs';
+import { createRollupClient } from '../src/rollup/client.mjs';
 
 const TOKEN = 'test-token';
-const MIRROR = '0x' + '11'.repeat(20);
-const L2_ID = '0x' + 'ab'.repeat(32);
-const ELECTION = '11111111-1111-4111-8111-111111111111';
+const ROLLUP = `0x${'11'.repeat(20)}`;
 
-function jsonResponse(result) {
-  return {
-    json: async () => ({ jsonrpc: '2.0', id: 1, result }),
-  };
+function listen() {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      const parsed = JSON.parse(body);
+      requests.push({ authorization: req.headers.authorization, method: parsed.method });
+      const result = parsed.method === 'eth_chainId' ? '0x1' : null;
+      res.writeHead(200, { 'content-type': 'application/json', connection: 'close' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: parsed.id,
+          ...(result ? { result } : { error: { code: -32000, message: 'stop' } }),
+        }),
+      );
+    });
+  });
+  return new Promise((resolve, reject) => {
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({
+        url: `http://127.0.0.1:${port}`,
+        requests,
+        close: () => new Promise((done) => server.close(done)),
+      });
+    });
+  });
 }
 
 describe('node L1 RPC auth', () => {
-  test('readOutcomeFromL1 sends the bearer token only when it is set', async () => {
-    const authed = [];
-    const open = [];
-    const fetchAuthed = async (_url, init) => {
-      authed.push(init.headers);
-      return jsonResponse('0x' + '00'.repeat(128));
-    };
-    const fetchOpen = async (_url, init) => {
-      open.push(init.headers);
-      return jsonResponse('0x' + '00'.repeat(128));
-    };
-    const cfg = { l1Rpc: 'http://127.0.0.1:9', l1TallyMirror: MIRROR, l1ChainId: 1 };
-    const ids = { l2Id: L2_ID, electionUuid: ELECTION };
+  test('rollup client sends the bearer token only when authToken is set', async () => {
+    const withToken = await listen();
+    const withoutToken = await listen();
+    try {
+      const authed = createRollupClient({
+        l1Rpc: withToken.url,
+        chainId: 1,
+        address: ROLLUP,
+        authToken: TOKEN,
+      });
+      await authed.election(1).catch(() => {});
+      assert.ok(withToken.requests.length >= 1);
+      for (const req of withToken.requests) assert.equal(req.authorization, `Bearer ${TOKEN}`);
 
-    const withToken = await readOutcomeFromL1(cfg, ids, {
-      fetchImpl: fetchAuthed,
-      env: { L1_RPC_AUTH_TOKEN: TOKEN },
-    });
-    assert.equal(withToken.status, 'not-found');
-    assert.equal(authed.length, 1);
-    assert.equal(authed[0].Authorization, `Bearer ${TOKEN}`);
-    assert.equal(authed[0]['content-type'], 'application/json');
-
-    const without = await readOutcomeFromL1(cfg, ids, {
-      fetchImpl: fetchOpen,
-      env: { L1_RPC_AUTH_TOKEN: '  ' },
-    });
-    assert.equal(without.status, 'not-found');
-    assert.equal(open.length, 1);
-    assert.equal(Object.hasOwn(open[0], 'Authorization'), false);
-    assert.deepEqual(open[0], { 'content-type': 'application/json' });
+      const open = createRollupClient({
+        l1Rpc: withoutToken.url,
+        chainId: 1,
+        address: ROLLUP,
+        authToken: '',
+      });
+      await open.election(1).catch(() => {});
+      assert.ok(withoutToken.requests.length >= 1);
+      for (const req of withoutToken.requests) assert.equal(req.authorization, undefined);
+    } finally {
+      await withToken.close();
+      await withoutToken.close();
+    }
   });
 
-  test('L1 funding check uses the same header rule', async () => {
-    const seen = [];
-    const fetchImpl = async (_url, init) => {
-      seen.push(init.headers);
-      const method = JSON.parse(init.body).method;
-      const result = method === 'eth_getBalance' ? '0xde0b6b3a7640000' : '0x3b9aca00';
-      return jsonResponse(result);
-    };
-    await l2FundingStatus(
-      { l1Rpc: 'http://127.0.0.1:9', operator: MIRROR },
-      { fetchImpl, env: { L1_RPC_AUTH_TOKEN: TOKEN } },
-    );
-    assert.ok(seen.length >= 1);
-    for (const headers of seen) assert.equal(headers.Authorization, `Bearer ${TOKEN}`);
-
-    const plain = [];
-    const fetchPlain = async (_url, init) => {
-      plain.push(init.headers);
-      const method = JSON.parse(init.body).method;
-      const result = method === 'eth_getBalance' ? '0xde0b6b3a7640000' : '0x3b9aca00';
-      return jsonResponse(result);
-    };
-    await l2FundingStatus({ l1Rpc: 'http://127.0.0.1:9', operator: MIRROR }, { fetchImpl: fetchPlain, env: {} });
-    assert.ok(plain.length >= 1);
-    for (const headers of plain) assert.equal(Object.hasOwn(headers, 'Authorization'), false);
-  });
-
-  test('civic L2 RPC calls do not send the L1 bearer token', async () => {
-    const seen = [];
-    const fetchImpl = async (_url, init) => {
-      seen.push(init.headers);
-      return jsonResponse({ l2Id: L2_ID });
-    };
-    await readOutcomeFromL2(
-      { civicRpc: 'http://127.0.0.1:9', l2Id: L2_ID },
-      { l2Id: '0x' + 'ff'.repeat(32), electionUuid: ELECTION },
-      { fetchImpl },
-    );
-    assert.equal(seen.length, 1);
-    assert.deepEqual(seen[0], { 'content-type': 'application/json' });
-    assert.equal(Object.hasOwn(seen[0], 'Authorization'), false);
+  test('a test config without authToken does not inherit L1_RPC_AUTH_TOKEN', async () => {
+    const server = await listen();
+    const previous = process.env.L1_RPC_AUTH_TOKEN;
+    const previousEnv = process.env.NODE_ENV;
+    process.env.L1_RPC_AUTH_TOKEN = TOKEN;
+    process.env.NODE_ENV = 'test';
+    try {
+      const client = createRollupClient({
+        l1Rpc: server.url,
+        chainId: 1,
+        address: ROLLUP,
+      });
+      await client.election(1).catch(() => {});
+      assert.ok(server.requests.length >= 1);
+      for (const req of server.requests) assert.equal(req.authorization, undefined);
+    } finally {
+      if (previous === undefined) delete process.env.L1_RPC_AUTH_TOKEN;
+      else process.env.L1_RPC_AUTH_TOKEN = previous;
+      if (previousEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousEnv;
+      await server.close();
+    }
   });
 });
