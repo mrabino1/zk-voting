@@ -7,9 +7,13 @@
 import { createRequire } from 'node:module';
 
 import { redactL1RpcAuth, scrubL1RpcAuthError } from '../l1RpcAuth.js';
-import { createL1, readL1ChainId } from './l1.mjs';
-import { Operator } from './operator.mjs';
 import { createApi } from './server.mjs';
+
+// l1.mjs (viem) and operator.mjs load on first use, after the server listens. A module
+// that fails to load is then an init failure (degraded or fail-fast with its reason),
+// not a crash before /health exists.
+const loadL1 = () => import('./l1.mjs');
+const loadOperator = () => import('./operator.mjs');
 
 const require = createRequire(import.meta.url);
 const { assertKeyAllowedOnChain, readDeployment } = require('../../packages/chain-client/index.js');
@@ -158,21 +162,23 @@ export async function initOperator(env, deps) {
     throw fail('ZK_VOTING_ALLOW_MOCK_PROOFS is for chain 31337 only', 'mock_proofs_refused');
   }
 
-  const l1 = deps.createL1({ rpcUrl: env.L1_RPC, chainId, rollup: env.ROLLUP_ADDRESS, privateKey, env });
+  const l1 = await deps.createL1({ rpcUrl: env.L1_RPC, chainId, rollup: env.ROLLUP_ADDRESS, privateKey, env });
   let operator;
   try {
-    operator = await deps.createOperator({
-      l1,
-      chainId,
-      dataDir: env.L2_DATA_DIR || './data',
-      allowMockProofs,
-      batchMaxWaitSeconds:
-        env.L2_BATCH_MAX_WAIT_SECONDS != null && env.L2_BATCH_MAX_WAIT_SECONDS !== ''
-          ? Number(env.L2_BATCH_MAX_WAIT_SECONDS)
-          : chainId === 31337
-            ? 0
-            : 600,
-    }).init();
+    operator = await (
+      await deps.createOperator({
+        l1,
+        chainId,
+        dataDir: env.L2_DATA_DIR || './data',
+        allowMockProofs,
+        batchMaxWaitSeconds:
+          env.L2_BATCH_MAX_WAIT_SECONDS != null && env.L2_BATCH_MAX_WAIT_SECONDS !== ''
+            ? Number(env.L2_BATCH_MAX_WAIT_SECONDS)
+            : chainId === 31337
+              ? 0
+              : 600,
+      })
+    ).init();
   } catch (err) {
     const mapped = normalizeFailure(err);
     throw fail(mapped.message, mapped.reason);
@@ -213,10 +219,10 @@ function defaultDeps(env, log) {
   return {
     readDeployment,
     assertKeyAllowedOnChain,
-    readL1ChainId,
-    createL1: (opts) => createL1(opts),
-    createOperator: (opts) =>
-      new Operator({
+    readL1ChainId: async (...args) => (await loadL1()).readL1ChainId(...args),
+    createL1: async (opts) => (await loadL1()).createL1(opts),
+    createOperator: async (opts) =>
+      new (await loadOperator()).Operator({
         ...opts,
         log: (...parts) => {
           const text = parts
