@@ -25,6 +25,8 @@ export function explorerRouter(deps) {
       let status = null;
       let batches = [];
       let error = null;
+      let code = null;
+      let reason = null;
       try {
         const [st, list] = await Promise.all([rollup.client.l2Status(), rollup.client.l2Batches(limit)]);
         if (st) {
@@ -33,9 +35,19 @@ export function explorerRouter(deps) {
         }
         batches = Array.isArray(list?.batches) ? list.batches : [];
       } catch (err) {
-        error = err.message || 'the L2 operator is unreachable';
+        error = err.code === 'L2_DEGRADED' ? err.message : err.message || 'the L2 operator is unreachable';
+        code = err.code || null;
+        reason = err.reason || null;
       }
-      res.json({ nfp: true, configured: true, status, batches, error });
+      res.json({
+        nfp: true,
+        configured: true,
+        status,
+        batches,
+        error,
+        ...(code ? { code } : {}),
+        ...(reason ? { reason } : {}),
+      });
     }),
   );
 

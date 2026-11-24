@@ -36,11 +36,17 @@ const ABI = [...ROLLUP_ABI, ...ERRORS_ABI];
 const hex32 = (v) => `0x${BigInt(v).toString(16).padStart(64, '0')}`;
 
 export class RollupError extends Error {
-  constructor(message, { status = 502, code = 'ROLLUP_ERROR' } = {}) {
+  constructor(message, { status = 502, code = 'ROLLUP_ERROR', reason } = {}) {
     super(message);
     this.status = status;
     this.code = code;
+    if (reason) this.reason = reason;
   }
+}
+
+function safeReason(reason) {
+  const text = String(reason || '');
+  return /^[a-z][a-z0-9_]{0,63}$/.test(text) ? text : '';
 }
 
 /** Contract revert → `{ status, code }` the API can return. */
@@ -130,7 +136,22 @@ export function createRollupClient(cfg, { fetchImpl = globalThis.fetch } = {}) {
     }
     const json = await res.json().catch(() => ({}));
     if (res.status === 404) return null;
-    if (!res.ok) throw new RollupError(json.error || `L2 answered ${res.status}`, { status: res.status, code: 'L2_REJECTED' });
+    if (json.status === 'degraded' || json.status === 'starting') {
+      const reason = safeReason(json.reason) || (json.status === 'starting' ? 'starting' : 'degraded');
+      throw new RollupError(
+        reason === 'starting' ? 'the L2 operator is still starting' : `the L2 operator is degraded (${reason})`,
+        { status: 503, code: 'L2_DEGRADED', reason },
+      );
+    }
+    if (json.status === 'standby') {
+      throw new RollupError('the L2 operator is in standby', { status: 503, code: 'L2_REJECTED' });
+    }
+    if (!res.ok) {
+      throw new RollupError(redactL1RpcAuth(json.error || `L2 answered ${res.status}`, authEnv), {
+        status: res.status,
+        code: 'L2_REJECTED',
+      });
+    }
     return json;
   }
 
@@ -199,6 +220,28 @@ export function createRollupClient(cfg, { fetchImpl = globalThis.fetch } = {}) {
     finalizeResult: (id, counts, subset) => send('finalizeResult', [id, counts.map(BigInt), subset]),
 
     // ----------------------------------------------------------------- L2
+    /**
+     * L2 process health. HTTP 200 with status "degraded" is reported here;
+     * it does not throw. A refused connection is "unreachable".
+     */
+    async l2Health() {
+      if (!cfg.l2Url) return { status: 'unconfigured', reason: null };
+      try {
+        const res = await fetchImpl(new URL('/health', cfg.l2Url), {
+          method: 'GET',
+          signal: AbortSignal.timeout(2_000),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) return { status: 'unreachable', reason: 'unreachable' };
+        if (json.status === 'degraded' || json.status === 'starting' || json.status === 'standby') {
+          const reason = safeReason(json.reason) || json.status;
+          return { status: json.status, reason };
+        }
+        return { status: 'ok', reason: null };
+      } catch {
+        return { status: 'unreachable', reason: 'unreachable' };
+      }
+    },
     submitBallot: (body) => l2('/v1/ballots', { method: 'POST', body }),
     receipt: (id, nullifier) => l2(`/v1/receipts/${id}/${BigInt(nullifier)}`),
     async l2Election(id) {

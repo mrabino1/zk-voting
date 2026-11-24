@@ -95,6 +95,9 @@ services:
       ROLLUP_DEPLOY_BLOCK: ${ROLLUP_DEPLOY_BLOCK:-}
       L2_URL: http://l2:8546
       L2_BALLOT_TOKEN: ${L2_BALLOT_TOKEN:?Set L2_BALLOT_TOKEN (./setup.sh mints one)}
+      # Empty or false: l2 exits if the rollup is not usable. 1: l2 stays up
+      # degraded and retries. The node reports that state from l2 /health.
+      L2_ALLOW_DEGRADED: ${L2_ALLOW_DEGRADED:-}
     volumes:
       - node-data:/data
       - l1-deployment:/deployments:ro
@@ -150,9 +153,15 @@ services:
       # Chain 31337 only: accept ballots without a zero-knowledge eligibility proof
       # (the node's vote pass still gates them). The operator refuses it elsewhere.
       ZK_VOTING_ALLOW_MOCK_PROOFS: ${ZK_VOTING_ALLOW_MOCK_PROOFS:-}
-      # Opt-in. true: when the rollup is not usable yet (unset, no genesis, no batch prover
-      # for this chain), stay up in standby (/health status "standby") instead of exiting.
-      # Standby accepts no ballots and sends nothing to L1. Empty keeps the exit.
+      # Empty or false (default): exit if genesis, the key, the chain id, or the
+      # batch prover is not usable. 1: stay up, serve /health as degraded, and
+      # retry. No batches are submitted until init succeeds. When this is set,
+      # it takes the process and L2_STANDBY_WHEN_UNCONFIGURED is not used.
+      L2_ALLOW_DEGRADED: ${L2_ALLOW_DEGRADED:-}
+      # Opt-in, and only when L2_ALLOW_DEGRADED is off. true: when the rollup is
+      # not usable yet (unset, no genesis, no batch prover for this chain), stay
+      # up in standby (/health status "standby") instead of exiting. Standby
+      # accepts no ballots and sends nothing to L1. Empty keeps the exit.
       L2_STANDBY_WHEN_UNCONFIGURED: ${L2_STANDBY_WHEN_UNCONFIGURED:-}
     volumes:
       - l2-data:/data

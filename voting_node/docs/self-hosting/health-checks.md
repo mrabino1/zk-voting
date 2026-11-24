@@ -7,7 +7,7 @@
 | Service | URL | Healthy |
 | --- | --- | --- |
 | `node` | `GET http://127.0.0.1:3000/health` (also `/api/health`) | HTTP 200 and `"ok": true` |
-| `l2` | `GET http://127.0.0.1:8546/health` | HTTP 200 and `"ok": true` |
+| `l2` | `GET http://127.0.0.1:8546/health` | HTTP 200. `"status": "ok"` once the rollup is ready. With `L2_ALLOW_DEGRADED=1`, a rollup that is not usable yet is still HTTP 200 with `"status": "degraded"` and a short `"reason"`, so this probe stays green while the operator retries. |
 | `tailscale` (optional) | `GET http://127.0.0.1:9002/healthz` inside the sidecar | HTTP 200 once the node has a tailnet IP |
 
 ## What `/health` returns
@@ -28,6 +28,7 @@
 
 - `mode` is `active` for the process that holds the writer lease and `standby` for a second process waiting to take over during a rolling update. **Both are healthy.** A standby serves reads and answers writes with HTTP 503 and `Retry-After: 2`.
 - The response header `x-zk-voting-mode` carries the same value.
+- `l2` is the operator's state as the node sees it: `ok`, `degraded` (with `reason`), `starting`, `unreachable`, or `unconfigured`. The node's own `ok` flag follows the database, so a degraded operator does not fail this probe. Ballot and other rollup calls answer HTTP 503 with code `L2_DEGRADED` until the operator is ready. The operator's own `/health` is separate and, with `L2_ALLOW_DEGRADED` left off, the process exits instead of serving `degraded`.
 
 ## Built-in probes
 
