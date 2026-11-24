@@ -16,6 +16,7 @@
 #   npm run test:auditor       # tools/auditor, including verify-rollup helpers
 #   npm run test:docs          # self-hosting docs, compose files, workflow diagram
 #   npm run test:setup         # ./setup.sh
+#   npm run test:fullstack     # one civic vote: Anvil, deploy.sh, operator and node as processes
 #   npm test                   # all of the above
 #   ./scripts/migrations-verify.sh
 #                              # no-op SQL check, production build, image boot smoke
@@ -110,6 +111,9 @@ jobs:
 
       - name: L2 tests (operator; end to end on Anvil)
         run: npm run test:l2
+
+      - name: Full-stack civic vote (Anvil, deploy.sh, operator and node as processes)
+        run: npm run test:fullstack
 
       - name: Forge tests
         run: npm run test:contracts

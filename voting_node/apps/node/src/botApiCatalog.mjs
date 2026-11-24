@@ -550,6 +550,13 @@ export const BOT_OPERATIONS = [
     tag: 'Rollup',
     summary: 'Where a ballot is: pending, committed or settled on L1 (batch number and transaction), or rejected.',
   }),
+  O('POST', '/api/elections/:id/rollup/prepare', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'clerk or tally_operator',
+    summary: 'Set the guardian threshold and the anonymity floor of a civic vote before it is published.',
+    body: 'threshold, minBallots',
+  }),
   O('POST', '/api/elections/:id/rollup/guardians', {
     tag: 'Rollup',
     auth: true,
@@ -569,11 +576,41 @@ export const BOT_OPERATIONS = [
     gate: 'tally_operator',
     summary: 'Relay a guardian-signed Feldman commitment to L1. The node cannot forge it.',
   }),
+  O('POST', '/api/elections/:id/rollup/mailbox', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Leave a sealed key-ceremony share for another guardian. Only that guardian can open it.',
+    body: 'from, to, box',
+  }),
+  O('GET', '/api/elections/:id/rollup/mailbox/:index', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'The sealed key-ceremony shares addressed to one guardian.',
+  }),
+  O('POST', '/api/elections/:id/rollup/disputes/:action', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Relay a guardian-signed key-ceremony dispute to L1: open, complain, reveal or expire.',
+  }),
   O('POST', '/api/elections/:id/rollup/finalize-key', {
     tag: 'Rollup',
     auth: true,
     gate: 'tally_operator',
     summary: 'Fix the joint key on L1 and send the roll.',
+  }),
+  O('POST', '/api/elections/:id/rollup/roll/sync', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'registrar or clerk',
+    summary: 'Send new registrations and disqualifications to L1 now (the node also does this on its tick until voting opens).',
+  }),
+  V('POST', '/api/elections/:id/rollup/close', {
+    tag: 'Rollup',
+    auth: true,
+    summary: 'Close a civic vote on L1 after its cutoff. Anyone may; the node also does this on its tick.',
   }),
   O('POST', '/api/elections/:id/rollup/guardians/:index/shares', {
     tag: 'Rollup',
@@ -582,10 +619,10 @@ export const BOT_OPERATIONS = [
     summary: 'Relay a guardian\'s Chaum-Pedersen decryption shares for the final sum.',
     body: 'shares',
   }),
-  O('POST', '/api/elections/:id/rollup/finalize', {
+  V('POST', '/api/elections/:id/rollup/finalize', {
     tag: 'Rollup',
     auth: true,
-    summary: 'Compute the totals from public L1 data and have L1 check and certify them.',
+    summary: 'Compute the totals from public L1 data and have L1 check and certify them. Anyone signed in may; the node also does this on its tick.',
   }),
 
   R('/api/elections/:id/parties', {

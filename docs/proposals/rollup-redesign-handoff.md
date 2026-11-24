@@ -1,4 +1,4 @@
-# Rollup redesign — handoff (updated 2026-11-23, phases 4 and 5 done)
+# Rollup redesign — handoff (updated 2026-11-24, phases 4 and 5 done, full-stack test added)
 
 Branch: `rollup-redesign` (cut from `test/unstable` at `7945ab6`). Design: `smart-contracts/docs/ROLLUP.md`.
 The working tree is clean at the commit after `028c44e`, which only updates this file.
@@ -7,8 +7,9 @@ The working tree is clean at the commit after `028c44e`, which only updates this
 
 1. Read "Goal and decisions", then "Next: phase 4", then "Decision needed".
 2. Set up the environment ("Environment" at the end) and run the tests to confirm the baseline:
-   node 861 pass with `CHROME_PATH` set (without Chrome only `a11y` and `landing-lang` fail);
-   `test:packages`, `test:l2` (21), `test:auditor`, `test:docs`, `test:setup`, and `forge test` (99) all pass.
+   node 851 pass with `CHROME_PATH` set (without Chrome only `a11y` and `landing-lang` fail);
+   `test:packages`, `test:l2` (26), `test:auditor`, `test:docs`, `test:setup`, `test:fullstack` (1, about
+   20 s) and `forge test` (99) all pass.
 
 ## Goal and decisions
 
@@ -215,11 +216,25 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
 - CI (`.github/workflows/ci.yml`, still manual-only): the compose job runs `./setup.sh -y` and checks
   the rollup stack; `test:setup` added. Setup now generates credentials for the bundled Postgres.
 - **Resume at:** "Other follow-ups" below, or step 1 of the batch-circuit plan once the toolchain
-  is approved.
-- **Next planned (not started):** a full-stack test without Docker: Anvil + `deploy.sh --target
-  local` + the operator + the Node as real processes, driving one civic vote through the Node API
-  (publish, `guardian:rollup` commit/receive/decrypt, roll sync, vote passes and ballots with
-  `evm_increaseTime`, close, finalize), then `verify-rollup` and the outcomes L1 audit.
+  is approved. The Docker Compose run (see "Known gaps") still needs a machine with Docker.
+- Full-stack test (done, 2026-11-24): `tools/fullstack/civic-vote.test.mjs`, `npm run test:fullstack`
+  (also in `npm test` and the CI job). Anvil, `scripts/deploy.sh --target local`, `l2/rollup/main.mjs`
+  and `apps/node/src/server.mjs` run as separate processes, wired by env as Compose wires them
+  (`ROLLUP_DEPLOYMENT_FILE`, Anvil 1 operator, Anvil 2 clerk; `ENV_FILE` points at an empty file so
+  a developer's `.env` does not leak in). Guardians use the real `rollup-guardian.mjs` CLI with an
+  officer API key; four voters use dev-login, a PIN, a blind vote pass and a cookie-less `POST /vote`
+  with `encryptRollupBallot`. It checks: one pass per voter (409), one ballot per nullifier (409),
+  every receipt settles, close, 2-of-3 decrypt, totals 1/0/3, `verify-rollup` (4 ballots in pubdata,
+  same counts), and `/api/outcomes/:id` with `verification.l1.ok`. Logs are kept and tailed on
+  failure (or with `FULLSTACK_KEEP=1`).
+  **Bug it found and fixed:** the guardian CLI could never run with an API key. Personal keys may
+  call only routes in the bot catalog, and `POST /rollup/mailbox`, `GET /rollup/mailbox/:index` and
+  `POST /rollup/disputes/:action` were missing, so `guardian:rollup commit` failed with
+  `API_KEY_SCOPE`. Added them (officer), plus `prepare` and `roll/sync` (officer) and `close` and
+  `finalize` (voter level, as the routes only need a signed-in user). `docs/BOT_API.md` regenerated.
+  Notes from the run, not bugs: the operator extrapolates L1 time between syncs, so after an
+  `evm_increaseTime` the test waits for `/v1/status` `l1Time` to catch up; the node's tick may
+  finalize before an explicit `POST /finalize`, which then answers 409 "the vote is finalized".
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
@@ -286,8 +301,9 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
 - **Eligibility.** Roll membership is not proven in zero knowledge; the node's vote pass gates
   ballots, with a persisted poll book (see "Decision taken"). The ballot 0/1 and sum-to-one proofs are real, and the operator
   checks them.
-- **Not run.** Docker Compose was never run (no Docker on this host), and the browser pages were
-  never rendered (no Chrome). What was checked instead: the compose YAML parses; the `l1-deploy`
+- **Not run.** Docker Compose was never run (no Docker on this host). The same processes now run
+  without Docker in `test:fullstack`, and the browser pages were rendered in Chrome for Testing.
+  What was checked for Compose itself: the compose YAML parses; the `l1-deploy`
   script ran against a host Anvil; `rollup/main.mjs` and `server.mjs` booted with the compose
   environment; `scripts/image-import-smoke.mjs` passes; the page modules load in Node; the browser
   ballot verifies with `verifyBallot`.
@@ -316,4 +332,4 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
   scratchpad with `node node_modules/@puppeteer/browsers/lib/cjs/main-cli.js install chrome@stable
   --path <dir>` (no extra system libraries needed). Set `CHROME_PATH` (tests) or
   `PUPPETEER_EXECUTABLE_PATH` (`npm run docs:workflow`) to its `chrome-linux64/chrome`. With it the
-  full node suite passes (861/861).
+  full node suite passes (851/851).

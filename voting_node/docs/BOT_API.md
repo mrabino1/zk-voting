@@ -179,12 +179,18 @@ Machine-readable copies:
 - `GET /api/elections/:id/rollup` (key read). A civic vote on ZkVotingRollup: L1 status, guardians and their commitments, the final sum once closed, and the certified totals.
 - `GET /api/elections/:id/rollup/ballot-context` (key read). What a browser needs to encrypt a ballot: L1 election id, chain id, rollup address, joint key, options.
 - `GET /api/elections/:id/rollup/receipts/:nullifier` (key read). Where a ballot is: pending, committed or settled on L1 (batch number and transaction), or rejected.
+- `POST /api/elections/:id/rollup/prepare` (clerk or tally_operator, signed in). Set the guardian threshold and the anonymity floor of a civic vote before it is published. Body: threshold, minBallots.
 - `POST /api/elections/:id/rollup/guardians` (tally_operator, signed in). Enroll a guardian by Baby Jubjub identity key before the vote is published. Body: label, identityKey [x, y].
 - `POST /api/elections/:id/rollup/publish` (clerk, signed in). Create the vote on L1 (createElection) with its guardians, threshold, window and anonymity floor.
 - `POST /api/elections/:id/rollup/guardians/:index/commit` (tally_operator, signed in). Relay a guardian-signed Feldman commitment to L1. The node cannot forge it.
+- `POST /api/elections/:id/rollup/mailbox` (tally_operator, signed in). Leave a sealed key-ceremony share for another guardian. Only that guardian can open it. Body: from, to, box.
+- `GET /api/elections/:id/rollup/mailbox/:index` (tally_operator, signed in). The sealed key-ceremony shares addressed to one guardian.
+- `POST /api/elections/:id/rollup/disputes/:action` (tally_operator, signed in). Relay a guardian-signed key-ceremony dispute to L1: open, complain, reveal or expire.
 - `POST /api/elections/:id/rollup/finalize-key` (tally_operator, signed in). Fix the joint key on L1 and send the roll.
+- `POST /api/elections/:id/rollup/roll/sync` (registrar or clerk, signed in). Send new registrations and disqualifications to L1 now (the node also does this on its tick until voting opens).
+- `POST /api/elections/:id/rollup/close` (key voter, signed in). Close a civic vote on L1 after its cutoff. Anyone may; the node also does this on its tick.
 - `POST /api/elections/:id/rollup/guardians/:index/shares` (tally_operator, signed in). Relay a guardian's Chaum-Pedersen decryption shares for the final sum. Body: shares.
-- `POST /api/elections/:id/rollup/finalize` (key officer, signed in). Compute the totals from public L1 data and have L1 check and certify them.
+- `POST /api/elections/:id/rollup/finalize` (key voter, signed in). Compute the totals from public L1 data and have L1 check and certify them. Anyone signed in may; the node also does this on its tick.
 ### External parties
 
 - `GET /api/elections/:id/parties` (key read). External eligibility parties for an election. Endpoint URLs are included only for staff.
