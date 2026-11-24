@@ -10,6 +10,10 @@
 //   GET  /v1/elections/:id/desert-proof         only once L1 is in desert mode
 //   GET  /v1/receipts/:electionId/:nullifier
 //   POST /v1/ballots                            { electionId, nullifier, ciphertexts, proof, eligibility }
+//
+// createStandbyApi() is the opt-in standby mode (L2_STANDBY_WHEN_UNCONFIGURED): the rollup is
+// not usable yet, so /health answers 200 with status "standby" (the process is alive) and
+// every other route answers 503. Nothing is accepted, batched, settled or sent to L1.
 
 import { createServer } from 'node:http';
 
@@ -110,5 +114,20 @@ export function createApi(operator, { ballotToken } = {}) {
       const status = err.status || 500;
       return send(res, status, { error: status === 500 ? 'internal error' : redactL1RpcAuth(err.message) });
     }
+  });
+}
+
+/**
+ * Standby API: the operator could not start against L1 (rollup unset, genesis missing, or no
+ * batch prover on this chain). Liveness only: /health is 200 with `ready: false`; /v1/status and
+ * every other route are 503, so the node treats the operator as not available.
+ * @param {{ reason: string, chainId?: number|null, rollup?: string|null, since?: string }} info
+ */
+export function createStandbyApi({ reason, chainId = null, rollup = null, since = new Date().toISOString() }) {
+  const body = { status: 'standby', ready: false, reason: redactL1RpcAuth(String(reason)), chainId, rollup, since };
+  return createServer((req, res) => {
+    const { pathname } = new URL(req.url, 'http://l2');
+    if (req.method === 'GET' && pathname === '/health') return send(res, 200, { ok: true, ...body });
+    return send(res, 503, { error: `the L2 operator is in standby: ${body.reason}`, ...body });
   });
 }

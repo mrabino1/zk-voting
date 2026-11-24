@@ -150,6 +150,10 @@ services:
       # Chain 31337 only: accept ballots without a zero-knowledge eligibility proof
       # (the node's vote pass still gates them). The operator refuses it elsewhere.
       ZK_VOTING_ALLOW_MOCK_PROOFS: ${ZK_VOTING_ALLOW_MOCK_PROOFS:-}
+      # Opt-in. true: when the rollup is not usable yet (unset, no genesis, no batch prover
+      # for this chain), stay up in standby (/health status "standby") instead of exiting.
+      # Standby accepts no ballots and sends nothing to L1. Empty keeps the exit.
+      L2_STANDBY_WHEN_UNCONFIGURED: ${L2_STANDBY_WHEN_UNCONFIGURED:-}
     volumes:
       - l2-data:/data
       - l1-deployment:/deployments:ro
