@@ -1,0 +1,1290 @@
+/* NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
+
+   Voter theme. Loaded only by the voter shell (index.html), after styles.css; the office,
+   explorer, ceremony and docs pages keep the plain dashboard look from styles.css.
+
+   Visual language: a dark navy desk with indigo tiles, one violet primary, soft shadows,
+   large rounded tiles, pill controls and heavy uppercase titles (the grants-desk layout of
+   grants.ajnafi.com / Nuursha Grants). One header row: wordmark, centred navigation,
+   session actions.
+
+   How it is organised:
+     1. Fonts (self-hosted, see fonts/README.md).
+     2. Structure that applies in every contrast mode (phase strip, "how this is counted").
+     3. The look, inside `@media not (prefers-contrast: more)`, so the high-contrast palette at
+        the end of styles.css still wins when a voter asks for more contrast.
+
+   Forks re-theme by changing the tokens in section 3's first :root block. Rules below that
+   block read tokens only; no hex values. */
+
+/* 1. Fonts ----------------------------------------------------------------- */
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("/fonts/dm-sans-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: italic;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("/fonts/dm-sans-latin-wght-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Source Code Pro";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("/fonts/source-code-pro-latin-wght-normal.woff2") format("woff2");
+}
+
+:root {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: var(--font-sans);
+  --font-mono: "Source Code Pro", "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+/* 2. Structure (every contrast mode) --------------------------------------- */
+
+/* Lifecycle phase strip on contest cards (contests.js contestPhaseStrip). */
+.phase-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.phase-step {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.65rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.phase-step.is-done {
+  color: var(--fg);
+}
+
+.phase-step.is-current {
+  border-color: var(--focus);
+  color: var(--fg);
+  font-weight: 700;
+}
+
+/* On a ballot or results page the phases are a tab row with an underline. */
+.phase-tabs {
+  gap: 1.75rem;
+  margin: 1rem 0 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.phase-tabs .phase-step {
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 0.65rem;
+  margin-bottom: -1px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.phase-tabs .phase-step.is-current {
+  color: var(--focus);
+  border-bottom: 3px solid var(--focus);
+}
+
+/* On a phone the phase tabs wrap; drop the shared underline so a wrapped row does not look
+   cut off. The current phase keeps its own underline. */
+@media (max-width: 600px) {
+  .phase-tabs {
+    gap: 0.4rem 1rem;
+    border-bottom: 0;
+  }
+}
+
+/* "How this is counted" on the ballot and results pages: every explanation behind one
+   disclosure, so the page shows the ballot first. */
+.how-counted {
+  margin: 0.75rem 0 0;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 0 1.25rem;
+}
+
+.how-counted > summary {
+  cursor: pointer;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.85rem;
+}
+
+.how-counted[open] {
+  padding-bottom: 1rem;
+}
+
+.how-counted > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.ballot-links {
+  margin: 0.5rem 0 0;
+}
+
+/* 3. The look --------------------------------------------------------------- */
+
+@media not (prefers-contrast: more) {
+  :root {
+    /* Desk surfaces: navy canvas, indigo tiles. */
+    --canvas: hsl(210 60% 8%);
+    --sunken: hsl(214 58% 6%);
+    --card: hsl(237 35% 12%);
+    --card-hover: hsl(237 35% 15%);
+    --soft: hsl(237 30% 17%);
+    --soft-hover: hsl(237 30% 21%);
+    --sidebar: hsl(237 48% 14%);
+    --sidebar-accent: hsl(237 35% 18%);
+    --border: hsl(237 30% 18%);
+    --border-strong: hsl(237 30% 24%);
+    --input: hsl(237 30% 24%);
+    --fg: hsl(0 0% 98%);
+    --muted: hsl(215 16% 68%);
+
+    /* One violet primary. --project fills controls (white text on it); --project-text is the
+       same hue lightened for text, links and focus rings on the dark canvas. Both are layout
+       theme tokens, so Site admin > Appearance recolours every control from these two. */
+    --project: hsl(252 98% 61%);
+    --project-text: hsl(252 98% 78%);
+    --primary: var(--project);
+    --primary-hover: color-mix(in srgb, var(--project) 88%, black);
+    --primary-ink: var(--project-text);
+    --on-primary: hsl(0 0% 100%);
+    --magenta: hsl(300 90% 68%);
+
+    /* Status colours, readable on --card. */
+    --ok: hsl(142 64% 62%);
+    --ok-bg: hsl(142 40% 14%);
+    --warn: hsl(38 80% 66%);
+    --warn-bg: hsl(38 40% 14%);
+    --danger: hsl(348 90% 74%);
+    --danger-bg: hsl(348 40% 16%);
+    --danger-solid: hsl(348 70% 45%);
+    --info: hsl(200 80% 72%);
+    --info-bg: hsl(205 45% 15%);
+    --sent: var(--info);
+    --sent-bg: var(--info-bg);
+
+    /* Card icon accents: the primary plus four supporting hues. */
+    --accent-yellow: var(--primary-ink);
+    --accent-orange: hsl(38 80% 66%);
+    --accent-green: hsl(142 64% 62%);
+    --accent-purple: hsl(300 90% 78%);
+    --accent-red: hsl(348 90% 74%);
+    --accent-lime: hsl(200 80% 72%);
+
+    /* Names used across styles.css. */
+    --org: var(--project-text);
+    --focus: var(--project-text);
+    --gold: var(--primary);
+    --gold-text: var(--primary-ink);
+    --gold-pale: color-mix(in srgb, var(--primary) 16%, var(--card));
+
+    /* Shape and depth. */
+    --radius: 0.75rem;
+    --radius-card: 1.5rem;
+    --radius-voter-card: 1.5rem;
+    --radius-option: 1rem;
+    --radius-bubble: 999px;
+    --voter-card-surface: var(--card);
+    --shadow-xs: 0 3px 6px rgba(0, 0, 0, 0.35);
+    --shadow-sm: 0 8px 20px -6px rgba(0, 0, 0, 0.45);
+    --shadow: 0 30px 45px -30px rgba(50, 50, 93, 0.45), 0 18px 36px -18px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 20px 35px -24px rgba(50, 50, 93, 0.35), 0 12px 24px -12px rgba(0, 0, 0, 0.3);
+
+    --header-height: 4.25rem;
+    --header-page: 90rem;
+    /* Wordmark on the dark header: light lead, teal rest (the brand's teal, lightened). */
+    --brand-lead: var(--fg);
+    --brand-accent: hsl(188 72% 62%);
+    --page: 72rem;
+    --measure: 46rem;
+  }
+
+  /* Canvas and type ----------------------------------------------------------- */
+
+  body.app-shell {
+    background:
+      radial-gradient(1200px 600px at 0% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 60%),
+      radial-gradient(900px 500px at 100% 30%, color-mix(in srgb, var(--magenta) 7%, transparent), transparent 60%),
+      var(--canvas);
+    background-attachment: fixed;
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    letter-spacing: -0.011em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .app-shell a {
+    color: var(--primary-ink);
+    text-underline-offset: 0.2em;
+  }
+
+  .app-shell code,
+  .app-shell .mono,
+  .app-shell .hex {
+    font-family: var(--font-mono);
+  }
+
+  /* Not-for-profit ribbon: a thin tinted strip, not a slab. */
+  .app-shell .nfp-banner {
+    background: color-mix(in srgb, var(--primary) 12%, var(--canvas));
+    color: var(--muted);
+    border-bottom: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    padding: 0.45rem 1rem;
+  }
+
+  /* Header -------------------------------------------------------------------- */
+
+  .app-shell .app-topbar {
+    min-height: var(--header-height);
+    padding: 0.5rem 1rem;
+    border-bottom: 0;
+    background: color-mix(in srgb, var(--canvas) 72%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  .app-shell .app-topbar a.brand {
+    gap: 0.6rem;
+    padding: 0.25rem 0.75rem 0.25rem 0.25rem;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--fg);
+  }
+
+  .app-shell .app-topbar a.brand:hover {
+    background: var(--soft);
+  }
+
+  .app-shell .app-topbar .brand-name,
+  .app-shell .app-topbar .brand-zk {
+    color: var(--brand-lead);
+  }
+
+  .app-shell .app-topbar .brand-rest {
+    color: var(--brand-accent);
+  }
+
+  .app-shell .app-topbar .brand-mark img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .app-shell .app-topbar .brand-name {
+    font-size: 1.125rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* The wordmark stands alone, as on the grants desk; the subtitle stays in the markup for
+     the other shells. */
+  .app-shell .app-topbar .brand-sub {
+    display: none;
+  }
+
+  .app-shell .topbar-chip {
+    padding: 0.1rem 0.6rem;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    color: var(--primary-ink);
+    font-weight: 700;
+  }
+
+  /* On a phone the header holds only the wordmark and the session button; the demo status is
+     still in the page notices and footer, and the signed-in name on the desk. */
+  @media (max-width: 479px) {
+    .app-shell .topbar-chip,
+    .app-shell .app-topbar .session-chip {
+      display: none;
+    }
+
+    .app-shell .app-topbar .brand-name {
+      letter-spacing: 0.06em;
+    }
+  }
+
+  .app-shell .topbar-sep {
+    background: var(--border);
+  }
+
+  .app-shell .topbar-crumb {
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .app-shell .topbar-actions {
+    gap: 0.6rem;
+  }
+
+  .app-shell .app-topbar .session-chrome {
+    gap: 0.6rem;
+    font-size: 0.8125rem;
+  }
+
+  .app-shell .app-topbar .session-chrome .btn,
+  .app-shell .app-topbar .session-chrome-btn {
+    min-height: 2.5rem;
+    padding: 0.4rem 1.1rem;
+    border: 2px solid color-mix(in srgb, var(--primary) 70%, transparent);
+    background: transparent;
+    color: var(--fg);
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  .app-shell .app-topbar .session-chrome .btn,
+  .app-shell .app-topbar .session-chrome-btn,
+  .app-shell .nav-main a {
+    white-space: nowrap;
+  }
+
+  .app-shell .app-topbar .session-chrome .btn:hover,
+  .app-shell .app-topbar .session-chrome-btn:hover {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
+  }
+
+  .app-shell .app-topbar .lang-toggle {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+    padding: 0.3rem 0.6rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--soft);
+  }
+
+  .app-shell .app-topbar .lang-toggle:hover {
+    background: var(--soft-hover);
+  }
+
+  .app-shell .lang-menu {
+    border-color: var(--border);
+    border-radius: 1rem;
+    background: var(--card);
+    box-shadow: var(--shadow-md);
+    padding: 0.35rem;
+  }
+
+  .app-shell .lang-option {
+    border-radius: 0.65rem;
+  }
+
+  .app-shell .lang-option:hover,
+  .app-shell .lang-option[aria-selected="true"] {
+    background: var(--soft);
+  }
+
+  /* Navigation: bold text links, no icons, violet when current. On a phone it is a scrolling
+     row of pills under the header. */
+  .app-shell .site-header {
+    background: color-mix(in srgb, var(--canvas) 72%, transparent);
+    border-bottom: 0;
+  }
+
+  .app-shell .header-inner {
+    padding: 0 0.75rem 0.6rem;
+  }
+
+  .app-shell .nav-main ul {
+    gap: 0.25rem;
+    scrollbar-width: none;
+  }
+
+  .app-shell .nav-main ul::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-shell .nav-main a {
+    min-height: 2.5rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    color: var(--fg);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    text-decoration: none;
+    transition: color 150ms ease, background-color 150ms ease;
+  }
+
+  .app-shell .nav-main a::before {
+    display: none;
+  }
+
+  .app-shell .nav-main a:hover {
+    background: transparent;
+    color: var(--primary-ink);
+  }
+
+  .app-shell .nav-main a[aria-current="page"] {
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+    color: var(--primary-ink);
+    font-weight: 800;
+  }
+
+  /* Wide screens, top placement (the default): one header row. The top bar's two halves and
+     the nav become cells of the body grid: wordmark | nav (centred) | session. */
+  @media (min-width: 960px) {
+    html[data-nav="top"] body.app-shell {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        "banner banner banner"
+        "brand nav actions"
+        "main main main"
+        "footer footer footer";
+    }
+
+    html[data-nav="top"] body.app-shell > * {
+      grid-column: 1 / -1;
+    }
+
+    html[data-nav="top"] body.app-shell > .nfp-banner,
+    html[data-nav="top"] body.app-shell > .layout-top {
+      grid-area: banner;
+    }
+
+    html[data-nav="top"] .app-shell .app-topbar {
+      display: contents;
+    }
+
+    /* One translucent band behind the header cells, so empty cells match the rest. */
+    html[data-nav="top"] body.app-shell::before {
+      content: "";
+      grid-row: 2;
+      grid-column: 1 / -1;
+      position: sticky;
+      top: 0;
+      z-index: 39;
+      background: color-mix(in srgb, var(--canvas) 72%, transparent);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+
+    html[data-nav="top"] .app-shell .topbar-start,
+    html[data-nav="top"] .app-shell .topbar-actions,
+    html[data-nav="top"] body.app-shell > .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      min-height: var(--header-height);
+      background: transparent;
+    }
+
+    html[data-nav="top"] .app-shell .topbar-actions #lang-switcher {
+      margin-top: 0;
+    }
+
+    html[data-nav="top"] .app-shell .topbar-start {
+      grid-area: brand;
+      padding-inline: max(1rem, calc((100vw - var(--header-page)) / 2)) 1rem;
+    }
+
+    html[data-nav="top"] .app-shell .topbar-actions {
+      grid-area: actions;
+      justify-content: flex-end;
+      padding-inline: 1rem max(1rem, calc((100vw - var(--header-page)) / 2));
+    }
+
+    html[data-nav="top"] body.app-shell > .site-header {
+      grid-area: nav;
+      justify-content: center;
+      min-width: 0;
+      border: 0;
+      height: auto;
+      overflow: visible;
+    }
+
+    html[data-nav="top"] .app-shell .header-inner {
+      display: flex;
+      justify-content: center;
+      min-width: 0;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    html[data-nav="top"] .app-shell .nav-main {
+      min-width: 0;
+    }
+
+    html[data-nav="top"] .app-shell .nav-main ul {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      gap: 0.15rem;
+    }
+
+    /* The page title already says where you are. */
+    html[data-nav="top"] .app-shell .topbar-sep,
+    html[data-nav="top"] .app-shell .topbar-crumb {
+      display: none;
+    }
+
+    html[data-nav="top"] .app-shell .site-main {
+      grid-area: main;
+      width: 100%;
+      max-width: var(--page);
+      margin-inline: auto;
+      padding: 2.5rem 1rem 4rem;
+    }
+
+    html[data-nav="top"] .app-shell .site-footer {
+      grid-area: footer;
+      max-width: none;
+      margin-inline: 0;
+    }
+  }
+
+  /* A long menu (a signed-in voter has 8 links, an officer 9) does not fit beside the wordmark
+     and session on a laptop. Rather than scroll links out of sight, give it its own centred row
+     under the header until the screen is wide enough for one row. */
+  @media (min-width: 960px) and (max-width: 1439px) {
+    html[data-nav="top"] body.app-shell:has(.nav-main li:nth-child(7)) {
+      grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        "banner banner banner"
+        "brand gap actions"
+        "nav nav nav"
+        "main main main"
+        "footer footer footer";
+    }
+
+    html[data-nav="top"] body.app-shell:has(.nav-main li:nth-child(7))::before {
+      grid-row: 2 / 4;
+    }
+
+    html[data-nav="top"] body.app-shell:has(.nav-main li:nth-child(7)) > .site-header {
+      top: var(--header-height);
+      min-height: 0;
+      padding-bottom: 0.6rem;
+    }
+  }
+
+  @media (min-width: 1440px) and (max-width: 1599px) {
+    html[data-nav="top"] body.app-shell:has(.nav-main li:nth-child(9)) {
+      grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        "banner banner banner"
+        "brand gap actions"
+        "nav nav nav"
+        "main main main"
+        "footer footer footer";
+    }
+
+    html[data-nav="top"] body.app-shell:has(.nav-main li:nth-child(9))::before {
+      grid-row: 2 / 4;
+    }
+
+    html[data-nav="top"] body.app-shell:has(.nav-main li:nth-child(9)) > .site-header {
+      top: var(--header-height);
+      min-height: 0;
+      padding-bottom: 0.6rem;
+    }
+  }
+
+  /* Sidebar placement keeps its column, restyled as a navy rail. */
+  @media (min-width: 960px) {
+    html[data-nav="sidebar"] .app-shell .site-header {
+      background: var(--sidebar);
+      border-inline-end: 0;
+    }
+
+    html[data-nav="sidebar"] .app-shell .header-inner {
+      padding: 1rem 0.75rem;
+    }
+
+    html[data-nav="sidebar"] .app-shell .nav-main a {
+      width: 100%;
+    }
+  }
+
+  /* Page heading -------------------------------------------------------------- */
+
+  .app-shell .site-main {
+    padding: 1.75rem 1rem 3.5rem;
+  }
+
+  .app-shell .page-head {
+    margin-bottom: 2rem;
+  }
+
+  .app-shell .page-head h1,
+  .app-shell .site-main > h1 {
+    margin: 0 0 0.75rem;
+    font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+
+  .app-shell .page-head h1::before,
+  .app-shell .site-main > h1::before {
+    display: none;
+  }
+
+  .app-shell .page-head .kicker,
+  .app-shell .kicker {
+    padding: 0.2rem 0.75rem;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary) 20%, transparent);
+    color: var(--primary-ink);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .app-shell .lede {
+    max-width: var(--measure);
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  .app-shell .cta-row {
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+
+  /* Section titles between tiles: heavy uppercase, like a tile title. */
+  .app-shell .site-main > h2,
+  .app-shell .site-main > section > h2,
+  .app-shell .site-main > div:not(.notice) > h2:not(.contest-card h2) {
+    margin: 2.75rem 0 1rem;
+    font-size: 1.125rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .app-shell .site-main h3 {
+    font-weight: 700;
+  }
+
+  /* Tiles ---------------------------------------------------------------------- */
+
+  .app-shell .election-card,
+  .app-shell .panel,
+  .app-shell .question,
+  .app-shell .faq-item,
+  .app-shell .outcomes-column,
+  .app-shell .punch-section,
+  .app-shell .how-grid article,
+  .app-shell .demo-steps > li,
+  .app-shell .receipt,
+  .app-shell .stat,
+  .app-shell .q-card,
+  .app-shell .opt-card,
+  .app-shell .aspect-card,
+  .app-shell .contest-card,
+  .app-shell .contest-stat,
+  .app-shell .contest-panel,
+  .app-shell .sign-in-panel,
+  .app-shell .pin-panel,
+  .app-shell .how-counted,
+  .app-shell .setup-step {
+    border: 1px solid transparent;
+    border-radius: var(--radius-card);
+    background: var(--card);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .app-shell .panel,
+  .app-shell .contest-card,
+  .app-shell .contest-panel,
+  .app-shell .sign-in-panel,
+  .app-shell .receipt,
+  .app-shell .question {
+    padding: 1.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .app-shell .panel,
+    .app-shell .contest-card,
+    .app-shell .contest-panel,
+    .app-shell .sign-in-panel,
+    .app-shell .receipt,
+    .app-shell .question {
+      padding: 1.75rem 2rem;
+    }
+  }
+
+  .app-shell .contest-stat {
+    padding: 1.5rem;
+  }
+
+  .app-shell .contest-stat .val {
+    margin-top: 0.5rem;
+    font-size: 1.875rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+
+  .app-shell .contest-stat .lbl,
+  .app-shell .contest-kicker,
+  .app-shell .contest-meter-label,
+  .app-shell .contest-id {
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+
+  .app-shell .contest-card h2,
+  .app-shell .contest-card h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
+  .app-shell .contest-meter {
+    height: 0.5rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--soft);
+    overflow: hidden;
+  }
+
+  .app-shell .contest-meter > span,
+  .app-shell .tally-fill,
+  .app-shell .tally-bar > span,
+  .app-shell .poll-bar > span {
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--primary), var(--magenta));
+  }
+
+  .app-shell .meta-list li,
+  .app-shell .identity-list li {
+    border-bottom-color: var(--border);
+  }
+
+  /* Dashboard step cards (home). */
+  .app-shell .demo-steps {
+    gap: 1.25rem;
+  }
+
+  .app-shell .dash-card {
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    column-gap: 1rem;
+    padding: 1.5rem 1.5rem 1.25rem;
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
+
+  .app-shell .dash-card:hover {
+    border-color: transparent;
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+  }
+
+  .app-shell .dash-card > h2,
+  .app-shell .dash-card > h3,
+  .app-shell .site-main .dash-card > h2 {
+    margin: 0.2rem 0 0.4rem;
+    font-size: 1.0625rem;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  .app-shell .dash-card > p {
+    font-size: 0.875rem;
+  }
+
+  .app-shell .card-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border: 0;
+    border-radius: 0.9rem;
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+
+  .app-shell .card-icon::before {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .app-shell .card-stats,
+  .app-shell .dash-card > .meta-list {
+    border-top: 0;
+    padding-top: 0.75rem;
+  }
+
+  .app-shell .card-stat strong {
+    color: var(--fg);
+    font-weight: 800;
+  }
+
+  /* Buttons -------------------------------------------------------------------- */
+
+  .app-shell .btn,
+  .app-shell button.btn,
+  .app-shell a.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1.25rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: var(--primary);
+    color: var(--on-primary);
+    font-size: 0.875rem;
+    font-weight: 700;
+    text-decoration: none;
+    box-shadow: var(--shadow-sm);
+    transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  }
+
+  .app-shell .btn:hover,
+  .app-shell button.btn:hover,
+  .app-shell a.btn:hover {
+    border-color: transparent;
+    background: var(--primary-hover);
+    color: var(--on-primary);
+  }
+
+  .app-shell .btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  /* "Soft" secondary: muted fill, no outline. */
+  .app-shell .btn-secondary,
+  .app-shell a.btn-secondary,
+  .app-shell button.btn-secondary {
+    border-color: transparent;
+    background: var(--soft);
+    color: var(--fg);
+    box-shadow: none;
+  }
+
+  .app-shell .btn-secondary:hover,
+  .app-shell a.btn-secondary:hover,
+  .app-shell button.btn-secondary:hover {
+    background: var(--soft-hover);
+    color: var(--fg);
+  }
+
+  .app-shell .btn-danger,
+  .app-shell button.btn-danger {
+    background: var(--danger-solid);
+    color: var(--on-danger);
+  }
+
+  .app-shell .btn-danger:hover,
+  .app-shell button.btn-danger:hover {
+    background: color-mix(in srgb, var(--danger-solid) 85%, black);
+    color: var(--on-danger);
+  }
+
+  .app-shell .btn:disabled,
+  .app-shell .btn[aria-disabled="true"] {
+    opacity: 0.5;
+    box-shadow: none;
+  }
+
+  .app-shell .card-stats .btn,
+  .app-shell .dash-card > div.cluster .btn {
+    min-height: 2.25rem;
+    padding: 0.35rem 1rem;
+    font-size: 0.8125rem;
+  }
+
+  .app-shell .footer-cta {
+    margin-top: 0.5rem;
+  }
+
+  /* Forms ---------------------------------------------------------------------- */
+
+  .app-shell input[type="text"],
+  .app-shell input[type="search"],
+  .app-shell input[type="email"],
+  .app-shell input[type="password"],
+  .app-shell input[type="number"],
+  .app-shell input[type="url"],
+  .app-shell input[type="tel"],
+  .app-shell input[type="datetime-local"],
+  .app-shell input[type="date"],
+  .app-shell input:not([type]),
+  .app-shell select,
+  .app-shell textarea {
+    min-height: 2.75rem;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid var(--input);
+    border-radius: var(--radius);
+    background: var(--sunken);
+    color: var(--fg);
+    font-size: 0.9375rem;
+  }
+
+  .app-shell input:focus-visible,
+  .app-shell select:focus-visible,
+  .app-shell textarea:focus-visible {
+    border-color: var(--primary-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 35%, transparent);
+  }
+
+  .app-shell .field-label,
+  .app-shell label > .lbl {
+    font-weight: 700;
+  }
+
+  .app-shell .field-hint {
+    color: var(--muted);
+  }
+
+  /* Notices: a tinted tile with a coloured dot, no side bar. ------------------- */
+
+  .app-shell .notice {
+    --tone: var(--primary-ink);
+    position: relative;
+    margin: 1rem 0;
+    padding: 0.9rem 1.15rem 0.9rem 2.4rem;
+    border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--tone) 8%, var(--card));
+    color: var(--fg);
+    font-size: 0.875rem;
+  }
+
+  .app-shell .notice::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 1.05rem;
+    top: 1.3rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--tone);
+  }
+
+  .app-shell .notice-warn {
+    --tone: var(--warn);
+  }
+
+  .app-shell .notice-ok {
+    --tone: var(--ok);
+  }
+
+  .app-shell .notice-error {
+    --tone: var(--danger);
+  }
+
+  .app-shell .notice-sent {
+    --tone: var(--info);
+  }
+
+  .app-shell .notice > :first-child {
+    margin-top: 0;
+  }
+
+  .app-shell .notice h2,
+  .app-shell .notice h3 {
+    margin: 0 0 0.35rem;
+    font-size: 0.9375rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .app-shell .notice > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* Pills ---------------------------------------------------------------------- */
+
+  .app-shell .status-pill,
+  .app-shell .pill,
+  .app-shell .pill-primary,
+  .app-shell .pill-status,
+  .app-shell .pill-count,
+  .app-shell .tag {
+    padding: 0.15rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-transform: none;
+  }
+
+  .app-shell .phase-step {
+    padding: 0.2rem 0.75rem;
+    border-color: transparent;
+    background: var(--soft);
+    font-weight: 600;
+  }
+
+  .app-shell .phase-step.is-current {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--primary) 24%, transparent);
+    color: var(--primary-ink);
+  }
+
+  .app-shell .phase-tabs .phase-step,
+  .app-shell .phase-tabs .phase-step.is-current {
+    background: transparent;
+    padding: 0 0 0.7rem;
+  }
+
+  .app-shell .phase-tabs .phase-step.is-current {
+    border-bottom-color: var(--primary-ink);
+  }
+
+  /* Tabs ----------------------------------------------------------------------- */
+
+  .app-shell .contest-tabs {
+    gap: 1.5rem;
+    border-bottom-color: var(--border);
+  }
+
+  .app-shell .contest-tabs button {
+    padding: 0.6rem 0;
+    border-bottom-width: 3px;
+    color: var(--fg);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .app-shell .contest-tabs button[aria-selected="true"] {
+    border-bottom-color: var(--primary-ink);
+    color: var(--primary-ink);
+    font-weight: 800;
+  }
+
+  /* Sign-in and registration methods: a pill segmented control. */
+  .app-shell .method-tabs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding: 0.3rem;
+    border-radius: 1.4rem;
+    background: var(--sunken);
+  }
+
+  .app-shell .method-tabs button {
+    min-height: 2.5rem;
+    padding: 0.4rem 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 700;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .app-shell .method-tabs button:hover {
+    background: var(--soft);
+    color: var(--fg);
+  }
+
+  .app-shell .method-tabs button[aria-selected="true"] {
+    background: var(--primary);
+    color: var(--on-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Tables --------------------------------------------------------------------- */
+
+  .app-shell table {
+    border: 0;
+    border-radius: 1rem;
+    background: var(--card);
+    box-shadow: var(--shadow-xs);
+    overflow: hidden;
+  }
+
+  .app-shell th {
+    background: transparent;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .app-shell td {
+    border-bottom-color: var(--border);
+  }
+
+  .app-shell th,
+  .app-shell td {
+    padding: 0.75rem 1rem;
+  }
+
+  .app-shell tbody tr:hover > td {
+    background: var(--card-hover);
+  }
+
+  /* Ballot --------------------------------------------------------------------- */
+
+  .ballot-page .question {
+    padding: 1.5rem 1.5rem 1.6rem;
+  }
+
+  .ballot-page .contest-panel > h2,
+  .contest-card .contest-kicker,
+  .ballot-page .ballot > h2 {
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .ballot-page .choice {
+    padding: 0.9rem 1.15rem;
+    border: 2px solid transparent;
+    border-radius: var(--radius-option);
+    background: var(--soft);
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .ballot-page .choice:hover {
+    background: var(--soft-hover);
+  }
+
+  .ballot-page .choice:has(input:checked) {
+    border-color: var(--primary-ink);
+    background: color-mix(in srgb, var(--primary) 18%, var(--card));
+  }
+
+  .ballot-page .choice input {
+    accent-color: var(--primary);
+  }
+
+  .ballot-page .choice-info {
+    border-radius: 999px;
+  }
+
+  .app-shell .rank-row {
+    border: 0;
+    border-radius: var(--radius-option);
+    background: var(--soft);
+  }
+
+  .app-shell input[type="checkbox"],
+  .app-shell input[type="radio"] {
+    accent-color: var(--primary);
+  }
+
+  .app-shell .check-row,
+  .app-shell .terms-agree {
+    border-radius: 1rem;
+  }
+
+  .vote-step {
+    padding: 0.4rem 0.95rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--soft);
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .vote-step.is-current {
+    background: color-mix(in srgb, var(--primary) 24%, transparent);
+    color: var(--primary-ink);
+    font-weight: 800;
+  }
+
+  .vote-path-civic,
+  .vote-path-poll {
+    border-inline-start-width: 1px;
+  }
+
+  .ballot-page .toolbar {
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+
+  .how-counted {
+    border-color: transparent;
+    background: var(--card);
+    padding: 0 1.5rem;
+  }
+
+  /* Footer --------------------------------------------------------------------- */
+
+  .app-shell .site-footer {
+    margin-top: 2rem;
+    padding: 2.5rem 1rem max(2.5rem, env(safe-area-inset-bottom));
+    border-top: 0;
+    background: var(--sidebar);
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .app-shell .site-footer > * {
+    max-width: var(--page);
+    margin-inline: auto;
+  }
+
+  .app-shell .footer-nfp {
+    color: var(--fg);
+    font-weight: 700;
+  }
+
+  .app-shell .footer-meta {
+    max-width: 52rem;
+    color: var(--muted);
+  }
+
+  .app-shell .site-footer a {
+    color: var(--fg);
+    text-decoration-color: color-mix(in srgb, var(--fg) 35%, transparent);
+  }
+
+  .app-shell .site-footer a:hover {
+    color: var(--primary-ink);
+  }
+
+  .app-shell .site-footer a.btn {
+    color: var(--on-primary);
+    text-decoration: none;
+  }
+
+  .app-shell .footer-extra {
+    justify-items: center;
+    text-align: center;
+    border-top-color: var(--border);
+  }
+
+  .app-shell .footer-social {
+    justify-content: center;
+  }
+
+  /* Motion is opt-out: styles.css turns transitions off for prefers-reduced-motion. */
+}

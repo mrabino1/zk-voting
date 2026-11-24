@@ -3,7 +3,9 @@
    sidebar and cards separated by thin borders, one yellow accent, compact sans UI.
    One dark scheme for every page (no theme toggle); prefers-contrast: more still
    switches to a high-contrast black-on-white palette at the end of this file.
-   Legacy token names (--navy, --cream, …) stay so existing rules keep resolving. */
+   Legacy token names (--navy, --cream, …) stay so existing rules keep resolving.
+   The voter shell (index.html) adds voter-theme.css on top: navy desk, violet primary,
+   rounded tiles and pills. Office, explorer, ceremony and docs pages use this file only. */
 
 :root {
   color-scheme: dark;
@@ -55,11 +57,6 @@
   --target: 2.5rem;
   --radius: 0.375rem;
   --radius-card: 0.375rem;
-  /* Voter pages: rounded cards and pill "bubbles" (see the handoff's voting-UI directive).
-     Forks re-theme by changing these, not the rules that use them. */
-  --radius-voter-card: 1rem;
-  --radius-bubble: 999px;
-  --radius-option: 0.85rem;
   --shadow: none;
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-serif: var(--font-sans);
@@ -3977,142 +3974,6 @@ html[data-client-host="1"] .site-footer {
   padding-inline-start: 1.25rem;
 }
 
-/* Voter pages, bubble look: rounded cards, option bubbles, pill steps and buttons.
-   Scoped to the voter-facing pages; the back office keeps its plain panels. */
-.ballot-page .question,
-.ballot-page .contest-panel,
-.ballot-page .receipt,
-.ballot-page .notice,
-.contest-card.election-card {
-  border-radius: var(--radius-voter-card);
-}
-
-.ballot-page .question {
-  padding: 1.25rem 1.35rem 1.4rem;
-}
-
-.ballot-page .choice {
-  border-radius: var(--radius-option);
-  padding: 0.85rem 1.1rem;
-}
-
-.ballot-page .choice-info {
-  border-radius: var(--radius-bubble);
-}
-
-.ballot-page .vote-step {
-  border-radius: var(--radius-bubble);
-  padding: 0.35rem 0.85rem;
-}
-
-.ballot-page .btn,
-.contest-card .btn {
-  border-radius: var(--radius-bubble);
-}
-
-.ballot-page .toolbar {
-  margin-top: 1.25rem;
-}
-
-/* Lifecycle phase strip on contest cards (contests.js contestPhaseStrip). */
-.phase-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  list-style: none;
-  padding: 0;
-  margin: 0.25rem 0 0.5rem;
-}
-
-.phase-step {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-bubble);
-  padding: 0.1rem 0.6rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.phase-step.is-done {
-  color: var(--fg);
-}
-
-.phase-step.is-current {
-  border-color: var(--focus);
-  color: var(--fg);
-  font-weight: 700;
-}
-
-/* Voter pages, second pass: large borderless cards, uppercase section labels, filled pill
-   buttons, and the election lifecycle as an underlined tab row (the layout language of
-   grants.ajnafi.com, in this theme's own tokens). High-contrast mode keeps its borders. */
-:root {
-  --radius-voter-card: 1.5rem;
-  --voter-card-surface: var(--card);
-  --voter-label-tracking: 0.08em;
-}
-
-@media (prefers-contrast: no-preference) {
-  .ballot-page .question,
-  .ballot-page .contest-panel,
-  .ballot-page .receipt,
-  .contest-card.election-card {
-    border: 0;
-    background: var(--voter-card-surface);
-    padding: 1.4rem 1.5rem;
-  }
-
-  .ballot-page .contest-panel > h2,
-  .contest-card .contest-kicker,
-  .ballot-page .ballot > h2 {
-    text-transform: uppercase;
-    letter-spacing: var(--voter-label-tracking);
-    font-weight: 800;
-  }
-
-  .ballot-page .btn,
-  .contest-card .btn {
-    padding: 0.55rem 1.15rem;
-    font-weight: 700;
-  }
-
-  .ballot-page .btn-secondary,
-  .contest-card .btn-secondary {
-    border-color: transparent;
-    background: var(--card-hover);
-  }
-
-  .ballot-page .choice {
-    border-color: transparent;
-    background: var(--card-hover);
-  }
-
-  .ballot-page .choice:has(input:checked) {
-    border-color: var(--focus);
-  }
-}
-
-.phase-tabs {
-  gap: 1.5rem;
-  margin: 1rem 0 0.75rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.phase-tabs .phase-step {
-  border: 0;
-  border-radius: 0;
-  padding: 0 0 0.6rem;
-  margin-bottom: -1px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.phase-tabs .phase-step.is-current {
-  color: var(--org);
-  border-bottom: 2px solid var(--org);
-}
-
 /* Top navigation (layout nav.placement = "top", the default): on wide screens the header is a
    bar across the top and the page is one centred column, as in grants.ajnafi.com. The sidebar
    grid above applies when the layout sets nav.placement = "sidebar". */
@@ -4176,52 +4037,3 @@ html[data-client-host="1"] .site-footer {
   }
 }
 
-/* "How this is counted" on the ballot page: every explanation behind one disclosure, so the
-   page shows the ballot first. A rounded card with a pill-shaped summary; tokens only. */
-.how-counted {
-  margin: 0.75rem 0 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-voter-card);
-  background: var(--voter-card-surface);
-  padding: 0 1.25rem;
-}
-
-.how-counted > summary {
-  cursor: pointer;
-  min-height: var(--target);
-  display: flex;
-  align-items: center;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: var(--voter-label-tracking);
-  font-size: 0.85rem;
-}
-
-.how-counted[open] {
-  padding-bottom: 1rem;
-}
-
-.how-counted > summary:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: var(--radius-bubble);
-}
-
-@media (prefers-contrast: no-preference) {
-  .how-counted {
-    border-color: transparent;
-  }
-}
-
-.ballot-links {
-  margin: 0.5rem 0 0;
-}
-
-/* On a phone the five phase tabs wrap; drop the shared underline so a wrapped row does not
-   look cut off. The current phase keeps its own underline. */
-@media (max-width: 600px) {
-  .phase-tabs {
-    gap: 0.4rem 1rem;
-    border-bottom: 0;
-  }
-}

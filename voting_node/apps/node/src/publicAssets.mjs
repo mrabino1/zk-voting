@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const VERSION_FILES = ['app.js', 'setup.js', 'passkey-wallet.js', 'styles.css', 'index.html', 'host-chrome.js'];
+const VERSION_FILES = ['app.js', 'setup.js', 'passkey-wallet.js', 'styles.css', 'voter-theme.css', 'index.html', 'host-chrome.js'];
 
 export function assetVersion(dir) {
   const hash = crypto.createHash('sha256');
