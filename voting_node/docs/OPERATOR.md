@@ -602,6 +602,7 @@ This is the default. The Node **still tallies**. Certification is a documented n
 | Variable | Required to post | Purpose |
 | --- | --- | --- |
 | `L1_RPC` (alias `L1_RPC_URL`) | yes | Ethereum JSON-RPC (Sepolia / Anvil). Not ZK-Voting L2. |
+| `L1_RPC_AUTH_TOKEN` | no | Optional bearer token when the L1 JSON-RPC endpoint requires auth. Empty sends no Authorization header. |
 | `L1_TALLY_MIRROR_ADDRESS` (alias `TALLY_MIRROR`) | yes | `L1TallyMirror` from `DeployL1.s.sol` / `DeployLocal.s.sol` |
 | `L1_PUBLISHER_PRIVATE_KEY` (alias `L1_PRIVATE_KEY`) | yes | Key that is `admin` or `setPublisher`'d on the mirror. **Not** the L2 prover `PRIVATE_KEY`. |
 | `L1_SETTLEMENT_ADDRESS` (alias `SETTLEMENT`) | no | `RollupSettlement` — attach current L2 state root |

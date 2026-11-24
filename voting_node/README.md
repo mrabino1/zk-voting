@@ -20,7 +20,7 @@ docker compose up -d --build  # setup.sh prints this exact command for your answ
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-`./setup.sh` (also `npm run setup`, or `./system_actions.sh setup`) asks for the super admin and setup token, the chain id, the entropy ceremony and setup entropy, the hostname, port, proxy and database, and the L2 identity and L1 submitter (`L1_RPC`, `L1_SUBMITTER_PRIVATE_KEY`, `L2_UUID`, `L2_SALT`, `L2_ADMIN_SECRET`, then derives `L2_OPERATOR_ADDRESS` and `L2_ID` and warns when the submitter balance is low). Run it again any time: your answers are the defaults. `--deploy coolify` prints the Coolify settings instead (secret values by name only). By hand instead: `cp .env.example .env` and edit it.
+`./setup.sh` (also `npm run setup`, or `./system_actions.sh setup`) asks for the super admin and setup token, the chain id, the entropy ceremony and setup entropy, the hostname, port, proxy and database, and the L2 identity and L1 submitter (`L1_RPC`, optional `L1_RPC_AUTH_TOKEN` bearer token for an L1 RPC that requires auth, `L1_SUBMITTER_PRIVATE_KEY`, `L2_UUID`, `L2_SALT`, `L2_ADMIN_SECRET`, then derives `L2_OPERATOR_ADDRESS` and `L2_ID` and warns when the submitter balance is low). Run it again any time: your answers are the defaults. `--deploy coolify` prints the Coolify settings instead (secret values by name only). By hand instead: `cp .env.example .env` and edit it.
 
 Then open the site and finish [first-run setup](./docs/self-hosting/first-launch.md) at `/setup`: create the super admin passkey (enter `SETUP_TOKEN` from `.env`, or the one-time token printed in the server log when that variable is empty), confirm the steps and press **Finish setup**.
 
@@ -522,6 +522,7 @@ ZK_VOTING_NODE_URL=http://node:3000
 
 # --- optional L1 (prover settlement + Node tally-hash). Empty = no-op. ---
 L1_RPC=
+L1_RPC_AUTH_TOKEN=
 SETTLEMENT_ADDRESS=
 PRIVATE_KEY=
 L1_TALLY_MIRROR_ADDRESS=
@@ -554,6 +555,7 @@ ARCHIVE_EXPLORER_SNAPSHOT=0
 | `RECEIPT_PDF_SECRET` | Stable HMAC for locked PDFs across restarts. Unset = Node writes `$DATA_DIR/receipt-pdf.secret` |
 | `EXPLORER_INGEST_SECRET` | L2 sequencer ingest of `/api/explorer/ingest`. Unset in production refuses ingest (explorer is not a second tally) |
 | `L1_RPC`, `L1_TALLY_MIRROR_ADDRESS`, `L1_PUBLISHER_PRIVATE_KEY` | Certify tally hashes on Ethereum. Unset = tally still works (`skipped`) |
+| `L1_RPC_AUTH_TOKEN` | Optional bearer token for an L1 RPC that requires auth. Empty sends no Authorization header. |
 | `SETTLEMENT_ADDRESS`, `PRIVATE_KEY` | L2 prover posts `RollupSettlement.submitBatch`. **Not** the Node `L1_PUBLISHER_PRIVATE_KEY` |
 | `ARCHIVE_ENABLED`, `ARCHIVE_S3_*`, `ARCHIVE_COMPRESS` | Hourly L2 attic to S3/R2. Default on and gzip. Empty bucket and no `file://` sink warns and does not prune. `ARCHIVE_ENABLED=0` turns it off |
 | `L2_SKIP_EMPTY_BLOCKS`, `L2_HEARTBEAT_SECONDS` | Default: seal on transactions, hour close, and one empty heartbeat per hour. `L2_SKIP_EMPTY_BLOCKS=0` seals every ~2s |

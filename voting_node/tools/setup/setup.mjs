@@ -46,6 +46,7 @@ export const SECRET_KEYS = Object.freeze([
   'L1_SUBMITTER_PRIVATE_KEY',
   'L2_SALT',
   'L2_ADMIN_SECRET',
+  'L1_RPC_AUTH_TOKEN',
 ]);
 
 /** Keys this script manages, in the order they are asked. */
@@ -444,6 +445,7 @@ export async function runSetup(opts = {}) {
         l1Rpc: next.L1_RPC,
         address: operator,
         fetchImpl: opts.fetchImpl || fetch,
+        env: { L1_RPC_AUTH_TOKEN: get('L1_RPC_AUTH_TOKEN') },
         gasPerBatch: BigInt(get('L1_SUBMITTER_GAS_PER_BATCH') || 250000),
         minBatches: BigInt(get('L1_SUBMITTER_MIN_BATCHES') || 20),
       });
@@ -452,6 +454,9 @@ export async function runSetup(opts = {}) {
       else p.say(`  WARNING (${f.level}): ${msg}`);
       if (f.level === 'low' || f.level === 'empty') p.say(`  Top up ${operator} on L1. The prover holds batches (nothing is lost) while it cannot pay for one.`);
     } else p.say('  Funding not checked (needs L1_RPC and the submitter key or address). Later: npm run l2:identity -- check-funding');
+    // Not prompted. Kept when already in the env file. Listed by name only
+    // on the Coolify plan when it is set; the value is never printed.
+    next.L1_RPC_AUTH_TOKEN = get('L1_RPC_AUTH_TOKEN');
 
     const deploy =
       args.deploy ||

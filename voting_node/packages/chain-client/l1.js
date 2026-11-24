@@ -17,6 +17,7 @@
 "use strict";
 
 const { toBigInt, toHex32, encodePacked, keccak256, functionSelector } = require("@zk-voting/proof-helpers");
+const { l1RpcHeaders, l1ViemHttp, redactL1RpcAuth, readL1RpcAuthToken, scrubL1RpcAuthError } = require("../../l2/l1RpcAuth.js");
 
 /** keccak256("zk-voting.election.identity.v1") — matches `ElectionIdentity.DOMAIN`. */
 const IDENTITY_DOMAIN_STRING = "zk-voting.election.identity.v1";
@@ -27,34 +28,35 @@ function padAddress(addr) {
   return `0x${hex}`;
 }
 
-async function rpc(rpcUrl, method, params, id = 1) {
+async function rpc(rpcUrl, method, params, id = 1, authToken = "") {
+  const token = String(authToken || "").trim();
   const res = await fetch(rpcUrl, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: l1RpcHeaders({ L1_RPC_AUTH_TOKEN: token }),
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
   });
   if (!res.ok) {
-    throw new Error(`rpc ${method}: HTTP ${res.status}`);
+    throw new Error(redactL1RpcAuth(`rpc ${method}: HTTP ${res.status}`, token));
   }
   const body = await res.json();
   if (body.error) {
     const msg = body.error.message || JSON.stringify(body.error);
-    throw new Error(`rpc ${method}: ${msg}`);
+    throw new Error(redactL1RpcAuth(`rpc ${method}: ${msg}`, token));
   }
   return body.result;
 }
 
-async function ethCall(rpcUrl, tx, blockTag = "latest") {
+async function ethCall(rpcUrl, tx, blockTag = "latest", authToken = "") {
   const params = [{ to: padAddress(tx.to), data: tx.data }];
   if (tx.from) params[0].from = padAddress(tx.from);
-  return rpc(rpcUrl, "eth_call", [params[0], blockTag]);
+  return rpc(rpcUrl, "eth_call", [params[0], blockTag], 1, authToken);
 }
 
-async function ethSendTransaction(rpcUrl, tx) {
+async function ethSendTransaction(rpcUrl, tx, authToken = "") {
   const payload = { to: padAddress(tx.to), data: tx.data };
   if (tx.from) payload.from = padAddress(tx.from);
   if (tx.gas) payload.gas = tx.gas;
-  return rpc(rpcUrl, "eth_sendTransaction", [payload]);
+  return rpc(rpcUrl, "eth_sendTransaction", [payload], 1, authToken);
 }
 
 const ZERO_HASH = `0x${"00".repeat(32)}`;
@@ -356,6 +358,7 @@ function readL1Env(env = process.env) {
       src.L1_SETTLEMENT_ADDRESS || src.SETTLEMENT_ADDRESS || src.SETTLEMENT || "",
     ).trim(),
     chainId: chainRaw ? Number(chainRaw) : 0,
+    authToken: readL1RpcAuthToken(src),
   };
 }
 
@@ -370,6 +373,9 @@ function normalizeL1Options(opts = {}) {
     privateKey: coalesceStr(opts.privateKey, env.privateKey),
     settlementAddress: coalesceStr(opts.settlementAddress, env.settlementAddress),
     chainId: opts.chainId || env.chainId || 0,
+    authToken: Object.prototype.hasOwnProperty.call(opts, "authToken")
+      ? String(opts.authToken ?? "").trim()
+      : env.authToken,
     walletClient: opts.walletClient,
     publicClient: opts.publicClient,
     account: opts.account,
@@ -512,10 +518,15 @@ async function readResultHash(mirrorAddress, electionId, opts = {}) {
   if (!rpcUrl) {
     throw new Error("readResultHash: L1_RPC unset");
   }
-  const raw = await ethCall(rpcUrl, {
-    to: mirror,
-    data: viewCalldataUint256("resultHashOf(uint256)", electionId),
-  });
+  const raw = await ethCall(
+    rpcUrl,
+    {
+      to: mirror,
+      data: viewCalldataUint256("resultHashOf(uint256)", electionId),
+    },
+    "latest",
+    n.authToken,
+  );
   return asBytes32(raw);
 }
 
@@ -532,10 +543,15 @@ async function readSettlementStateRoot(opts = {}) {
     });
   }
   if (!n.rpcUrl) return ZERO_HASH;
-  const raw = await ethCall(n.rpcUrl, {
-    to: padAddress(settlement),
-    data: functionSelector("stateRoot()"),
-  });
+  const raw = await ethCall(
+    n.rpcUrl,
+    {
+      to: padAddress(settlement),
+      data: functionSelector("stateRoot()"),
+    },
+    "latest",
+    n.authToken,
+  );
   return asBytes32(raw);
 }
 
@@ -703,7 +719,7 @@ async function postTallyHash(opts = {}) {
         const accounts = require("viem/accounts");
         const pk = n.privateKey.startsWith("0x") ? n.privateKey : `0x${n.privateKey}`;
         const account = accounts.privateKeyToAccount(pk);
-        const chainId = n.chainId || Number(await rpc(n.rpcUrl, "eth_chainId", []));
+        const chainId = n.chainId || Number(await rpc(n.rpcUrl, "eth_chainId", [], 1, n.authToken));
         const chain = viem.defineChain({
           id: chainId,
           name: "l1",
@@ -713,7 +729,7 @@ async function postTallyHash(opts = {}) {
         const wallet = viem.createWalletClient({
           account,
           chain,
-          transport: viem.http(n.rpcUrl),
+          transport: l1ViemHttp(viem.http, n.rpcUrl, { L1_RPC_AUTH_TOKEN: n.authToken }),
         });
         hash = await wallet.writeContract({
           address: padAddress(n.mirrorAddress),
@@ -735,11 +751,15 @@ async function postTallyHash(opts = {}) {
         });
         n.chainId = chainId;
       } else if (n.account) {
-        hash = await ethSendTransaction(n.rpcUrl, {
-          to: n.mirrorAddress,
-          data,
-          from: n.account,
-        });
+        hash = await ethSendTransaction(
+          n.rpcUrl,
+          {
+            to: n.mirrorAddress,
+            data,
+            from: n.account,
+          },
+          n.authToken,
+        );
       } else {
         return {
           posted: false,
@@ -805,7 +825,7 @@ async function postTallyHash(opts = {}) {
         ...identityView(),
       };
     }
-    throw err;
+    throw scrubL1RpcAuthError(err, n.authToken);
   }
 }
 
@@ -824,10 +844,15 @@ async function readResultHashOfIdentity(mirrorAddress, id, opts = {}) {
   if (!n.rpcUrl) {
     throw new Error("readResultHashOfIdentity: L1_RPC unset");
   }
-  const raw = await ethCall(n.rpcUrl, {
-    to: mirror,
-    data: `${functionSelector("resultHashOfIdentity(bytes32)")}${asBytes32(id).slice(2)}`,
-  });
+  const raw = await ethCall(
+    n.rpcUrl,
+    {
+      to: mirror,
+      data: `${functionSelector("resultHashOfIdentity(bytes32)")}${asBytes32(id).slice(2)}`,
+    },
+    "latest",
+    n.authToken,
+  );
   return asBytes32(raw);
 }
 

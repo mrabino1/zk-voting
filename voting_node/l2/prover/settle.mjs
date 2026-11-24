@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { l1RpcHeaders, redactL1RpcAuth } from '../l1RpcAuth.js';
 import { keccak256Hex } from '../sequencer/state.mjs';
 import { buildBatch } from './batch.mjs';
 
@@ -220,18 +221,18 @@ export async function commitBatch({
   };
 }
 
-async function rpcCall(rpcUrl, method, params, fetchImpl) {
+async function rpcCall(rpcUrl, method, params, fetchImpl, env) {
   const res = await fetchImpl(rpcUrl, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: l1RpcHeaders(env),
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   });
   const json = await res.json();
-  if (json.error) throw new Error(json.error.message || 'rpc error');
+  if (json.error) throw new Error(redactL1RpcAuth(json.error.message || 'rpc error', env));
   return json.result;
 }
 
-export async function loadSettlementView(config, fetchImpl = fetch) {
+export async function loadSettlementView(config, fetchImpl = fetch, env = process.env) {
   const l1Rpc = String(config.l1Rpc || '').trim();
   const settlementAddress = String(config.settlementAddress || '').trim();
   if (!l1Rpc) {
@@ -241,13 +242,13 @@ export async function loadSettlementView(config, fetchImpl = fetch) {
   let code = null;
   let batchCount = null;
   try {
-    rpcChainId = await rpcCall(l1Rpc, 'eth_chainId', [], fetchImpl);
+    rpcChainId = await rpcCall(l1Rpc, 'eth_chainId', [], fetchImpl, env);
   } catch {
     rpcChainId = null;
   }
   if (settlementAddress) {
     try {
-      code = await rpcCall(l1Rpc, 'eth_getCode', [settlementAddress, 'latest'], fetchImpl);
+      code = await rpcCall(l1Rpc, 'eth_getCode', [settlementAddress, 'latest'], fetchImpl, env);
     } catch {
       code = null;
     }
@@ -257,6 +258,7 @@ export async function loadSettlementView(config, fetchImpl = fetch) {
         'eth_call',
         [{ to: settlementAddress, data: BATCH_COUNT_SELECTOR }, 'latest'],
         fetchImpl,
+        env,
       );
       batchCount = raw ? Number(BigInt(raw)) : null;
     } catch {

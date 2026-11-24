@@ -3,15 +3,25 @@
 
 http_ok() {
   local url="$1"
+  local token="${2:-}"
   command -v curl >/dev/null 2>&1 || return 1
-  curl -fsS --max-time 5 "$url" >/dev/null 2>&1
+  if [[ -n "$token" ]]; then
+    curl -fsS --max-time 5 -H "Authorization: Bearer ${token}" "$url" >/dev/null 2>&1
+  else
+    curl -fsS --max-time 5 "$url" >/dev/null 2>&1
+  fi
 }
 
 rpc_ok() {
   local url="$1"
+  local token="${2:-}"
   [[ -z "$url" ]] && return 1
   command -v curl >/dev/null 2>&1 || return 1
-  curl -fsS --max-time 5 -H 'content-type: application/json' \
+  local -a hdr=(-H 'content-type: application/json')
+  if [[ -n "$token" ]]; then
+    hdr+=(-H "Authorization: Bearer ${token}")
+  fi
+  curl -fsS --max-time 5 "${hdr[@]}" \
     -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
     "$url" >/dev/null 2>&1
 }
@@ -70,11 +80,13 @@ cmd_connectivity() {
   printf '%s%s%s\n' "$BLD" "Connectivity (from this machine)" "$RST"
   echo
 
-  local node_url l2_url chain_rpc l1_rpc
+  local node_url l2_url chain_rpc l1_rpc l1_auth
   node_url="${ZK_VOTING_HEALTH_URL:-$HEALTH_URL}"
   l2_url="${ZK_VOTING_L2_HEALTH_URL:-$L2_HEALTH_URL}"
   chain_rpc="${CHAIN_RPC:-}"
   l1_rpc="${L1_RPC:-}"
+  # Trim only. An empty token sends no Authorization header. Never print it.
+  l1_auth="$(printf '%s' "${L1_RPC_AUTH_TOKEN:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
   if http_ok "$node_url"; then
     ok "  Node        reachable — $node_url"
@@ -98,7 +110,7 @@ cmd_connectivity() {
 
   if [[ -z "$l1_rpc" ]]; then
     echo "  L1_RPC      (unset — tally-hash certification skipped)"
-  elif rpc_ok "$l1_rpc" || http_ok "$l1_rpc"; then
+  elif rpc_ok "$l1_rpc" "$l1_auth" || http_ok "$l1_rpc" "$l1_auth"; then
     ok "  L1_RPC      reachable — $l1_rpc"
   else
     warn "  L1_RPC      not reachable — $l1_rpc"

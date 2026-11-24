@@ -422,6 +422,9 @@ export function getConfig(overrides = {}) {
     relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY || '',
     // NODE_ENV=test never inherits operator L1 keys (CI / local Anvil leakage).
     l1Rpc: isTest ? '' : process.env.L1_RPC || process.env.L1_RPC_URL || '',
+    // Optional bearer token for an L1 RPC that requires auth. Blank sends no
+    // Authorization header. Tests never inherit an operator token.
+    l1RpcAuthToken: isTest ? '' : String(process.env.L1_RPC_AUTH_TOKEN || '').trim(),
     l1TallyMirrorAddress: isTest
       ? ''
       : process.env.L1_TALLY_MIRROR_ADDRESS ||

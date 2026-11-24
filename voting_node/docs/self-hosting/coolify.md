@@ -34,7 +34,7 @@ Coolify's proxy publishes the site. The `ports:` entries in `docker-compose.yml`
 
 ## 3. Environment
 
-Shortcut: on any machine with a clone, run `./setup.sh --deploy coolify`. It asks the setup questions (super admin, chain id, ceremony, entropy, hostname, database, L2 identity and L1 submitter) and prints the Coolify settings: the plain variables with their values, and the secret ones (`SETUP_TOKEN`, `ZK_ENTROPY`, `DATABASE_URL`, `EXPLORER_INGEST_SECRET`, `RECEIPT_PDF_SECRET`, `L1_SUBMITTER_PRIVATE_KEY`, `L2_SALT`, `L2_ADMIN_SECRET`, `L1_RPC`) by name only. Copy each secret value from the `voting_node/.env` it wrote and mark it secret in Coolify.
+Shortcut: on any machine with a clone, run `./setup.sh --deploy coolify`. It asks the setup questions (super admin, chain id, ceremony, entropy, hostname, database, L2 identity and L1 submitter) and prints the Coolify settings: the plain variables with their values, and the secret ones (`SETUP_TOKEN`, `ZK_ENTROPY`, `DATABASE_URL`, `EXPLORER_INGEST_SECRET`, `RECEIPT_PDF_SECRET`, `L1_SUBMITTER_PRIVATE_KEY`, `L2_SALT`, `L2_ADMIN_SECRET`, `L1_RPC`) by name only. When `L1_RPC_AUTH_TOKEN` is set, it is listed the same way: an optional bearer token for an L1 RPC that requires auth. Leave it empty when the endpoint does not. Copy each secret value from the `voting_node/.env` it wrote and mark it secret in Coolify.
 
 Set at least these in **Environment Variables**:
 

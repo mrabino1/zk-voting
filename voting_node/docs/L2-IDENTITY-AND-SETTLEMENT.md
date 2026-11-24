@@ -45,6 +45,7 @@ npm run l2:identity -- check-funding   # balance vs. batch cost
 ```
 
 Env (`voting_node/.env.example`): `L1_SUBMITTER_PRIVATE_KEY` (secret), `L1_RPC`,
+`L1_RPC_AUTH_TOKEN` (optional bearer token for an L1 RPC that requires auth; empty sends no Authorization header),
 `L1_SUBMITTER_MIN_BATCHES` (20), `L1_SUBMITTER_GAS_PER_BATCH` (250000),
 `L2_UUID`, `L2_SALT` (secret), `L2_ID`, `L2_OPERATOR_ADDRESS`,
 `L2_ADMIN_SECRET` (secret), `L2_ADMISSION` (`strict` in Compose),

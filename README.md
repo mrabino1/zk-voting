@@ -19,7 +19,7 @@ cd zk-voting
 3. **Entropy ceremony**: is there one, and its host (for example `ceremony.zk-voting.org`).
 4. **Setup entropy**: if the ceremony is closed, paste its validated `zke1:ceremony:…` output; otherwise generate local entropy now or skip.
 5. **Site and environment**: public hostname (`VOTE_FQDN`), port, reverse proxy, database (JSON or Postgres), product name. Missing app secrets are generated.
-6. **L2 identity and L1 settlement**: `L1_RPC`, `L1_SUBMITTER_PRIVATE_KEY` (secret), and a new `L2_UUID`, `L2_SALT` (secret) and `L2_ADMIN_SECRET` (secret), from which it derives `L2_OPERATOR_ADDRESS` and `L2_ID` and checks the submitter balance (warning when low).
+6. **L2 identity and L1 settlement**: `L1_RPC`, `L1_SUBMITTER_PRIVATE_KEY` (secret), and a new `L2_UUID`, `L2_SALT` (secret) and `L2_ADMIN_SECRET` (secret), from which it derives `L2_OPERATOR_ADDRESS` and `L2_ID` and checks the submitter balance (warning when low). Optional `L1_RPC_AUTH_TOKEN` is a bearer token for an L1 RPC that requires auth; leave it empty when the endpoint does not.
 
 It never prints a secret, keeps your answers as the defaults when you run it again (a re-run with nothing changed writes nothing), and ends with the exact launch command: `docker compose up -d --build` here, the Coolify settings (`--deploy coolify`), or `npm run dev`. Then open `/setup` in the browser to create the super admin passkey and finish. Options: `./setup.sh --help` (`-y` takes every default). Details: [First launch](./voting_node/docs/self-hosting/first-launch.md), [L2 identity and settlement](./voting_node/docs/L2-IDENTITY-AND-SETTLEMENT.md).
 

@@ -84,7 +84,7 @@ the tally mirror if L2_FACTORY was not known at the L1 step.
 
 L2 node, sequencer and prover settings all come from `.env` (see
 `.env.example`: `L2_RPC_PORT`, `L2_RPC_BIND`, `L2_BATCH_SIZE`,
-`L2_ADMISSION`, `L1_RPC`, `L1_SUBMITTER_*`, ...). Keep `L2_RPC_BIND=127.0.0.1`
+`L2_ADMISSION`, `L1_RPC`, `L1_RPC_AUTH_TOKEN`, `L1_SUBMITTER_*`, ...). `L1_RPC_AUTH_TOKEN` is an optional bearer token for an L1 RPC that requires auth; leave it empty when the endpoint does not. Keep `L2_RPC_BIND=127.0.0.1`
 unless a reverse proxy you control fronts it.
 
 ## Local checks

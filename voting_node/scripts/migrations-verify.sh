@@ -157,6 +157,7 @@ cmd_smoke() {
       -e CHAIN_RPC= \
       -e L1_RPC= \
       -e L1_RPC_URL= \
+      -e L1_RPC_AUTH_TOKEN= \
       -e L1_PUBLISHER_PRIVATE_KEY= \
       -e L1_PRIVATE_KEY= \
       -e RELAYER_PRIVATE_KEY= \

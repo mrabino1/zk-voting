@@ -8,6 +8,7 @@ import { asyncHandler, HttpError } from '../http.mjs';
 import { publishDue } from '../electionState.mjs';
 import { presentOutcomeDetail } from '../outcomes.mjs';
 import { isUuid } from '../electionIds.mjs';
+import { redactL1RpcAuth } from '../../../../l2/l1RpcAuth.js';
 import {
   electionKeyFor,
   l2FundingStatus,
@@ -27,7 +28,7 @@ export function l2ResultsRouter(deps, { env = process.env, fetchImpl = fetch } =
     asyncHandler(async (req, res) => {
       const cfg = await readL2IdentityConfig(env);
       const out = { ...publicL2Identity(cfg), nfp: true };
-      if (req.query.funding === '1') out.funding = await l2FundingStatus(cfg, { fetchImpl });
+      if (req.query.funding === '1') out.funding = await l2FundingStatus(cfg, { fetchImpl, env });
       res.json(out);
     }),
   );
@@ -65,10 +66,10 @@ export function l2ResultsRouter(deps, { env = process.env, fetchImpl = fetch } =
           message: e.message,
         }));
       const tryL1 = () =>
-        readOutcomeFromL1({ ...cfg }, { l2Id, electionUuid }, { fetchImpl }).catch((e) => ({
+        readOutcomeFromL1({ ...cfg }, { l2Id, electionUuid }, { fetchImpl, env }).catch((e) => ({
           status: 'l1-unreachable',
           source: 'l1',
-          message: e.message,
+          message: redactL1RpcAuth(e.message, env),
         }));
 
       let result;

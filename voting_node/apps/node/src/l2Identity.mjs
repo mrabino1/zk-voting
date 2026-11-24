@@ -10,6 +10,7 @@
 import { computeElectionKey, isUuid, resolveIdentity, resolveOperatorAddress } from '../../../l2/identity.mjs';
 import { normalizeElectionType } from './electionType.mjs';
 import { signAdminCivic } from '../../../l2/adminAuth.mjs';
+import { l1RpcHeaders, redactL1RpcAuth } from '../../../l2/l1RpcAuth.js';
 import { checkSubmitterFunding } from '../../../l2/prover/funding.mjs';
 import { keccak256Hex } from '../../../l2/sequencer/state.mjs';
 
@@ -51,8 +52,8 @@ export function publicL2Identity(cfg) {
   };
 }
 
-export async function l2FundingStatus(cfg, { fetchImpl = fetch } = {}) {
-  return checkSubmitterFunding({ l1Rpc: cfg.l1Rpc, address: cfg.operator, fetchImpl });
+export async function l2FundingStatus(cfg, { fetchImpl = fetch, env = process.env } = {}) {
+  return checkSubmitterFunding({ l1Rpc: cfg.l1Rpc, address: cfg.operator, fetchImpl, env });
 }
 
 export function electionKeyFor(cfg, electionUuid) {
@@ -60,15 +61,19 @@ export function electionKeyFor(cfg, electionUuid) {
   return computeElectionKey({ l1ChainId: cfg.l1ChainId || 0, l2Id: cfg.l2Id, electionUuid });
 }
 
-async function jsonRpc(url, method, params, fetchImpl) {
+async function jsonRpc(url, method, params, fetchImpl, headers, env = process.env) {
   const res = await fetchImpl(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: headers || { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
     signal: AbortSignal.timeout(8000),
   });
   const json = await res.json();
-  if (json.error) throw Object.assign(new Error(json.error.message || 'rpc error'), { rpcCode: json.error.code });
+  if (json.error) {
+    throw Object.assign(new Error(redactL1RpcAuth(json.error.message || 'rpc error', env)), {
+      rpcCode: json.error.code,
+    });
+  }
   return json.result;
 }
 
@@ -125,7 +130,7 @@ export async function readOutcomeFromL2(cfg, { l2Id, electionUuid }, { fetchImpl
 const RESULT_OF_SELECTOR_SIG = 'resultOf(bytes32)';
 
 /** Outcome as mirrored on L1. Stubbed until the canonical addresses exist. */
-export async function readOutcomeFromL1(cfg, { l2Id, electionUuid }, { fetchImpl = fetch } = {}) {
+export async function readOutcomeFromL1(cfg, { l2Id, electionUuid }, { fetchImpl = fetch, env = process.env } = {}) {
   const key =
     l2Id && isUuid(electionUuid)
       ? computeElectionKey({ l1ChainId: cfg.l1ChainId || 0, l2Id, electionUuid })
@@ -140,7 +145,14 @@ export async function readOutcomeFromL1(cfg, { l2Id, electionUuid }, { fetchImpl
   }
   const selector = keccak256Hex(Buffer.from(RESULT_OF_SELECTOR_SIG)).slice(0, 10);
   const data = selector + key.slice(2);
-  const raw = await jsonRpc(cfg.l1Rpc, 'eth_call', [{ to: cfg.l1TallyMirror, data }, 'latest'], fetchImpl);
+  const raw = await jsonRpc(
+    cfg.l1Rpc,
+    'eth_call',
+    [{ to: cfg.l1TallyMirror, data }, 'latest'],
+    fetchImpl,
+    l1RpcHeaders(env),
+    env,
+  );
   // (bytes32 resultHash, bytes32 countsHash, uint64 postedAt, uint64 batchIndex)
   const hex = String(raw || '0x').slice(2).padEnd(256, '0');
   const resultHash = '0x' + hex.slice(0, 64);

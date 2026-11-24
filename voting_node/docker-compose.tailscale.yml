@@ -89,6 +89,7 @@ services:
       # Tally-hash certification (L1TallyMirror). Unset → no-op. Do not put
       # mainnet publisher keys in committed Compose files. Not the L2 prover key.
       L1_RPC: ${L1_RPC:-}
+      L1_RPC_AUTH_TOKEN: ${L1_RPC_AUTH_TOKEN:-}
       L1_TALLY_MIRROR_ADDRESS: ${L1_TALLY_MIRROR_ADDRESS:-}
       L1_PUBLISHER_PRIVATE_KEY: ${L1_PUBLISHER_PRIVATE_KEY:-}
       L1_SETTLEMENT_ADDRESS: ${L1_SETTLEMENT_ADDRESS:-}
@@ -189,6 +190,7 @@ services:
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
       L1_RPC: ${L1_RPC:-}
+      L1_RPC_AUTH_TOKEN: ${L1_RPC_AUTH_TOKEN:-}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
       SETTLEMENT_ADDRESS: ${SETTLEMENT_ADDRESS:-}
       # The L2 operator's L1 key (minimal ETH; pays batch gas). PRIVATE_KEY is the legacy name.

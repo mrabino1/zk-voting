@@ -9,6 +9,7 @@ import { loadConfig } from '../sequencer/state.mjs';
 import { ROLLUP_SETTLEMENT_ABI } from './batch.mjs';
 import { importOptional, resolveIdentityAsync, resolveOperatorAddress } from '../identity.mjs';
 import { checkBatchAdmission } from './admission.mjs';
+import { l1ViemHttp, redactL1RpcAuth } from '../l1RpcAuth.js';
 import { checkSubmitterFunding } from './funding.mjs';
 import {
   assertProverDoesNotDeploy,
@@ -77,7 +78,8 @@ async function submitBatchL1(batch) {
   }
   const pk = config.privateKey.startsWith('0x') ? config.privateKey : `0x${config.privateKey}`;
   const account = accounts.privateKeyToAccount(pk);
-  const publicClient = viem.createPublicClient({ transport: viem.http(config.l1Rpc) });
+  const transport = l1ViemHttp(viem.http, config.l1Rpc);
+  const publicClient = viem.createPublicClient({ transport });
   const chainId = await publicClient.getChainId();
   const chain = viem.defineChain({
     id: chainId,
@@ -88,7 +90,7 @@ async function submitBatchL1(batch) {
   const wallet = viem.createWalletClient({
     account,
     chain,
-    transport: viem.http(config.l1Rpc),
+    transport,
   });
   // L1 values come from batch.settlement: a chained root and
   // dataHash = keccak(abi.encode(index, prev, new)), as RollupSettlement checks.
@@ -119,14 +121,14 @@ async function tick(cursor, lease) {
     Object.assign(cursor, readCursor(config.dataDir));
   }
   const gate = await loadSettlementView(config);
-  if (gate.mode === 'fail-closed') {
-    console.error(`prover fail closed: ${gate.reason}`);
+    if (gate.mode === 'fail-closed') {
+    console.error(`prover fail closed: ${redactL1RpcAuth(gate.reason)}`);
     return;
   }
   if (gate.mode === 'submit') {
     const funding = await fundingStatus();
     if (funding && funding.level === 'empty') {
-      console.error(`prover holding batches: ${funding.message}`);
+      console.error(`prover holding batches: ${redactL1RpcAuth(funding.message)}`);
       return;
     }
   }
@@ -148,7 +150,7 @@ async function tick(cursor, lease) {
   Object.assign(cursor, result.cursor);
   for (const action of result.actions) {
     if (action.failClosed) {
-      console.error(`prover fail closed: ${action.reason}`);
+      console.error(`prover fail closed: ${redactL1RpcAuth(action.reason)}`);
       continue;
     }
     if (action.duplicate) {
@@ -169,7 +171,9 @@ async function fundingStatus() {
   if (lastFunding && now - lastFundingAt < 5 * 60_000) return lastFunding;
   lastFunding = await checkSubmitterFunding({ l1Rpc: config.l1Rpc, address: submitterAddress });
   lastFundingAt = now;
-  if (lastFunding.level === 'low' || lastFunding.level === 'unreachable') console.warn(lastFunding.message);
+  if (lastFunding.level === 'low' || lastFunding.level === 'unreachable') {
+    console.warn(redactL1RpcAuth(lastFunding.message));
+  }
   return lastFunding;
 }
 
@@ -187,7 +191,7 @@ async function main() {
   }
   if (config.l1Rpc && submitterAddress) {
     const f = await fundingStatus();
-    if (f) console.log(f.message);
+    if (f) console.log(redactL1RpcAuth(f.message));
   }
   console.log(
     'ZK-Voting L2 prover  NOT FOR PROFIT  rpc=' +
@@ -213,7 +217,7 @@ async function main() {
     try {
       await tick(cursor, lease);
     } catch (err) {
-      console.warn('prover tick failed (will retry):', err.message || err);
+      console.warn('prover tick failed (will retry):', redactL1RpcAuth(err.message || err));
     }
     const slice = Math.min(config.blockTimeMs || 1000, 1000);
     const step = 100;
@@ -229,6 +233,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(redactL1RpcAuth(err && err.stack ? err.stack : err));
   process.exit(1);
 });
