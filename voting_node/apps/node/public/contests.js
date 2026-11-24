@@ -9,14 +9,32 @@ import { electionTypeNameOf } from "./election-type-ui.js";
 const POLL_PHASES = ["Registration", "Voting", "Counting", "Results"];
 
 /**
+ * Phase index (0 Registration … 3 Results) from a civic vote's L1 status, which is the record
+ * once the vote is on the rollup: the node itself never tallies it. Null for a draft.
+ */
+export function l1PhaseIndex(l1, now = Math.floor(Date.now() / 1000)) {
+  const status = l1?.status;
+  if (!status || status === "draft") return null;
+  if (status === "finalized" || status === "withheld") return 3;
+  if (status === "closing" || status === "closed" || status === "halted") return 2;
+  if (status === "scheduled") {
+    if (now >= Number(l1.cutoffTime)) return 2;
+    return now >= Number(l1.startTime) ? 1 : 0;
+  }
+  return 0; // keygen: the roll is still open
+}
+
+/**
  * The lifecycle as a phase strip: Draft (a civic vote not yet on L1), Registration, Voting,
  * Counting, Results. Node states: 0 created, 1 roll frozen, 2 open, 3 closed, 4 tallied.
+ * Pass `l1` (the /rollup view's `l1`) to follow L1 instead of the node state.
  */
-export function contestPhases(election) {
+export function contestPhases(election, { l1 = null, now } = {}) {
   const civic = electionTypeNameOf(election) === "vote";
-  const onL1 = election?.chainMode === "rollup" && election?.rollupElectionId != null;
+  const fromL1 = civic && l1 ? l1PhaseIndex(l1, now) : null;
+  const onL1 = fromL1 != null || (election?.chainMode === "rollup" && election?.rollupElectionId != null);
   const state = Number(election?.state);
-  const idx = state >= 4 ? 3 : state === 3 ? 2 : state === 2 ? 1 : 0;
+  const idx = fromL1 ?? (state >= 4 ? 3 : state === 3 ? 2 : state === 2 ? 1 : 0);
   if (civic && !onL1) {
     return [{ label: "Draft", state: "current" }, ...POLL_PHASES.map((label) => ({ label, state: "todo" }))];
   }
@@ -24,12 +42,12 @@ export function contestPhases(election) {
   return civic ? [{ label: "Draft", state: "done" }, ...phases] : phases;
 }
 
-/** `tabs: true` draws the strip as a page-level tab row (ballot page) instead of pills. */
-export function contestPhaseStrip(h, election, { tabs = false } = {}) {
+/** `tabs: true` draws the strip as a page-level tab row (ballot, results) instead of pills. */
+export function contestPhaseStrip(h, election, { tabs = false, l1 = null } = {}) {
   return h(
     "ol",
     { class: tabs ? "phase-steps phase-tabs" : "phase-steps", "aria-label": "Stage" },
-    ...contestPhases(election).map((p) =>
+    ...contestPhases(election, { l1 }).map((p) =>
       h("li", { class: `phase-step is-${p.state}`, ...(p.state === "current" ? { "aria-current": "step" } : {}), text: p.label })
     )
   );

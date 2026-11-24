@@ -92,8 +92,12 @@ Read these before you plan a real election:
   knowledge. The Node issues one blind vote pass per voter on the roll and records who took a pass
   (a poll book, never which ballot). The ballot's 0/1 and sum-to-one proofs are real and checked.
 - **Polls are weaker.** A poll is counted by your Node and can disclose interim results.
-- **Not yet run end to end in Docker or a browser** on the maintainers' current branch; see
-  [`docs/proposals/rollup-redesign-handoff.md`](./docs/proposals/rollup-redesign-handoff.md).
+- **Docker Compose not yet run end to end.** The same processes (Anvil, `deploy.sh`, the L2
+  operator and the Node) run one civic vote without Docker in `npm run test:fullstack`, and the
+  voter pages are checked in Chrome, but a full `docker compose up` run is still to be done.
+- **The Terms of Use are a placeholder.** `voting_node/apps/node/legal/terms.md` ships as a
+  template with bracketed fields (operator name, governing law, contacts). Fill them in and have
+  counsel review them before real voters accept.
 
 ## Branches
 

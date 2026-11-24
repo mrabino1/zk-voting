@@ -6,6 +6,7 @@
  * the steps a voter walks through, and what still blocks a live ballot.
  */
 
+import { electionTypeNameOf } from "./election-type-ui.js";
 import { isRollupVote } from "./rollup-vote.js";
 
 /**
@@ -26,6 +27,13 @@ export function ballotPath(election, source) {
       title: "Civic vote, settled on Ethereum",
       body:
         "Your choice is encrypted in this browser. Nobody decrypts a single ballot: after the cutoff the guardians decrypt only the final sum, and the L1 contract checks it.",
+    };
+  }
+  if (electionTypeNameOf(election) === "vote") {
+    return {
+      kind: "civic-draft",
+      title: "Civic vote, not on Ethereum yet",
+      body: "The election office has not published this vote to the rollup, so it takes no ballots yet. Once it does, your choice is encrypted in this browser and only the final sum is ever decrypted.",
     };
   }
   return {

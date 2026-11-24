@@ -395,7 +395,7 @@ users[].termsHash / termsVersion / termsAcceptedAt / termsEmailSentAt / termsEma
 users[].termsNotifiedHash / termsNotifiedAt
 ```
 
-Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was current when the person accepted. Version 2 adds the feedback assignment clause. A person who accepted version 1 keeps that PDF hash; the next acceptance stores the new one.
+Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was current when the person accepted. Version 3 is a **placeholder template**: before real voters accept it, replace every bracketed field (operator name, governing law, contacts, liability cap, retention) and have counsel review it. Each edit changes the hash and asks every signed-in person to accept again, so finish the edits before launch. A person who accepted an earlier version keeps that PDF hash; the next acceptance stores the new one.
 
 ### Feedback (`/feedback`)
 

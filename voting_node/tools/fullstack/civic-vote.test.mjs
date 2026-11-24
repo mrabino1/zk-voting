@@ -72,6 +72,7 @@ describe('full stack: one civic vote through real processes', { skip }, () => {
   let deployment;
   let deploymentFile;
   let l2Url;
+  let passed = false;
 
   const env = (extra) => ({
     PATH: `${FOUNDRY}:${process.env.PATH}`,
@@ -222,7 +223,7 @@ describe('full stack: one civic vote through real processes', { skip }, () => {
   });
 
   after(async () => {
-    const failed = process.exitCode || test.failed;
+    const failed = !passed;
     for (const p of procs.reverse()) {
       p.child.stopping = true;
       p.child.kill('SIGTERM');
@@ -352,9 +353,8 @@ describe('full stack: one civic vote through real processes', { skip }, () => {
     ok(await api('POST', roll('/close'), { jar: voters[3].jar }));
     await waitFor('the final sum on L1', async () => (await api('GET', roll(''))).json?.accumulator);
     for (const g of guardians.slice(0, 2)) await guardianCli('decrypt', g.me, cli(g));
-    // The node's tick may finalize first; then the explicit call is told so.
-    const fin = await api('POST', roll('/finalize'), { jar: voters[3].jar });
-    assert.ok(fin.status === 200 || (fin.status === 409 && /finalized/.test(fin.json?.error)), fin.text);
+    // The node's tick may close or finalize first; both calls are idempotent.
+    ok(await api('POST', roll('/finalize'), { jar: voters[3].jar }));
 
     const view = ok(await api('GET', roll('')));
     assert.equal(view.l1.status, 'finalized');
@@ -379,5 +379,6 @@ describe('full stack: one civic vote through real processes', { skip }, () => {
 
     const outcome = ok(await api('GET', `/api/outcomes/${id}`));
     assert.equal(outcome.verification.l1?.ok, true, JSON.stringify(outcome.verification));
+    passed = true;
   });
 });

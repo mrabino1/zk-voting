@@ -18,6 +18,10 @@ describe('vote flow helpers', () => {
     assert.equal(ballotPath(poll, 'live').kind, 'poll');
     assert.match(ballotPath(poll, 'live').body, /weaker/);
     assert.equal(ballotPath(civic, 'sample').kind, 'sample');
+    // A civic vote not yet on L1 is not described as a poll.
+    const draft = ballotPath({ id: 'e3', electionTypeName: 'vote' }, 'live');
+    assert.equal(draft.kind, 'civic-draft');
+    assert.match(draft.title, /not on Ethereum yet/);
   });
 
   test('voteSteps marks done, current and todo', () => {
@@ -149,6 +153,21 @@ describe('contest phases', async () => {
     assert.equal(current({ ...onL1, state: 3 }), 'Counting');
     assert.equal(current({ ...onL1, state: 4 }), 'Results');
     assert.deepEqual(contestPhases({ ...onL1, state: 3 }).map((p) => p.state), ['done', 'done', 'done', 'current', 'todo']);
+  });
+  test('with an L1 view, a civic vote follows L1, which reaches Results (the node never tallies it)', () => {
+    const civic = { electionTypeName: 'vote', state: 3 };
+    const at = (l1, now) => contestPhases(civic, { l1, now }).find((p) => p.state === 'current')?.label;
+    assert.equal(at({ status: 'draft' }), 'Draft');
+    assert.equal(at({ status: 'keygen' }), 'Registration');
+    const window = { status: 'scheduled', startTime: 100, cutoffTime: 200 };
+    assert.equal(at(window, 50), 'Registration');
+    assert.equal(at(window, 150), 'Voting');
+    assert.equal(at(window, 250), 'Counting');
+    assert.equal(at({ status: 'closed' }), 'Counting');
+    assert.equal(at({ status: 'finalized' }), 'Results');
+    assert.equal(at({ status: 'withheld' }), 'Results');
+    // A poll ignores an L1 view.
+    assert.equal(contestPhases({ electionTypeName: 'poll', state: 2 }, { l1: { status: 'finalized' } }).find((p) => p.state === 'current').label, 'Voting');
   });
   test('a poll has no draft phase', () => {
     assert.deepEqual(contestPhases({ electionTypeName: 'poll', state: 2 }).map((p) => p.label), ['Registration', 'Voting', 'Counting', 'Results']);

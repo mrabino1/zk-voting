@@ -415,6 +415,7 @@ export default {
     sealedBody: "Contagens por opção e apurações parciais ficam seladas para todos, inclusive os responsáveis, até esta eleição terminar. O comparecimento é visível.",
     sealedStatus: "Resultados selados",
     almostLive: "Quase ao vivo",
+    howBlocksWork: "Como funcionam estes blocos",
     almostLiveBody:
       "Somas por escolha, por hora, desta consulta. O bloco das 08:00–08:59 pode ser publicado às 09:30, depois que o portão de resultados abre (quando 100 eleitores tiverem emitido a sua primeira cédula, ou no fim programado, o que ocorrer primeiro). Horas com menos de 10 cédulas se fundem para a frente. A série congela no encerramento. Um bloco publicado permanece como foi publicado pela primeira vez. Essas somas não são a apuração certificada.",
     trailingHelp:

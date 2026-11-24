@@ -415,6 +415,7 @@ export default {
     sealedBody: "Los conteos por opción y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine. La participación es visible.",
     sealedStatus: "Resultados sellados",
     almostLive: "Casi en vivo",
+    howBlocksWork: "Cómo funcionan estos bloques",
     almostLiveBody:
       "Sumas por opción, por hora, de esta encuesta. El bloque de las 08:00–08:59 puede publicarse a las 09:30, después de que se abre la puerta de resultados (cuando 100 votantes hayan emitido su primera boleta, o al llegar el fin programado, lo que ocurra primero). Las horas con menos de 10 boletas se fusionan hacia adelante. La serie se congela al cierre. Un bloque publicado se mantiene tal como se publicó por primera vez. Estas sumas no son el escrutinio certificado.",
     trailingHelp:

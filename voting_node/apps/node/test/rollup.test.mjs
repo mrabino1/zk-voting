@@ -74,6 +74,7 @@ function fakeClient() {
       return { electionId: 7, configHash: '0x01', tx: '0xtx' };
     },
     registerVoters: record('registerVoters'),
+    closeElection: record('closeElection'),
     disqualify: record('disqualify'),
     submitBallot: async (b) => {
       calls.push(['submitBallot', b]);
@@ -147,6 +148,29 @@ describe('rollup service rules (fake L1/L2)', () => {
     const stored = JSON.stringify(bc.toJSONSafe(e));
     for (const [c1] of ballot.ciphertexts) assert.ok(!stored.includes(c1[0].toString()), 'no ciphertext stored');
     assert.deepEqual(Object.keys(e.rollup.receipts), ['123']);
+  });
+
+  test('close and finalize are idempotent: a request after the tick acted just reads L1', async () => {
+    const store = new MemStore();
+    const client = fakeClient();
+    client.guardian = async () => ({ committed: true, excluded: false, sharesPosted: true });
+    client.guardianCommitments = async () => [];
+    client.accumulator = async () => null;
+    client.result = async () => ({ counts: ['1', '2'] });
+    const svc = new RollupService({ store, client, config: {} });
+    store.add(vote({ rollup: { electionId: 7, guardians: [], synced: { commitments: [], disqualified: [] }, receipts: {}, mailbox: [] } }));
+    client.info = { ...client.info, status: 'scheduled' };
+    await svc.close('e1');
+    assert.equal(client.calls.filter((c) => c[0] === 'closeElection').length, 1);
+    for (const status of ['closing', 'closed', 'finalized', 'withheld']) {
+      client.info = { ...client.info, status };
+      await svc.close('e1');
+    }
+    assert.equal(client.calls.filter((c) => c[0] === 'closeElection').length, 1, 'no second close is sent');
+    client.info = { ...client.info, status: 'finalized' };
+    assert.equal((await svc.finalize('e1')).l1.status, 'finalized');
+    client.info = { ...client.info, status: 'scheduled' };
+    await assert.rejects(svc.finalize('e1'), (err) => err.extra?.code === 'NOT_CLOSED' || err.code === 'NOT_CLOSED');
   });
 
   test('a second ballot under a nullifier is refused, also when both arrive at once', async () => {

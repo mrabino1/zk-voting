@@ -14,6 +14,8 @@ import { ELECTION_TYPE_VOTE, electionTypeOf } from '../electionType.mjs';
 import { HttpError } from '../http.mjs';
 import { RollupError } from './client.mjs';
 
+/** L1 statuses after which closing is already done (or no longer possible). */
+const PAST_VOTING = new Set(['closing', 'closed', 'finalized', 'withheld', 'halted']);
 export const DEFAULT_MIN_BALLOTS = 5;
 const MAX_GUARDIANS = 16;
 const MAX_OPTIONS = 8;
@@ -301,9 +303,11 @@ export class RollupService {
 
   // ----------------------------------------------------------------- results
 
+  /** Idempotent: the node's tick may already have closed the vote; a second request just reads it. */
   async close(electionId) {
     const { r } = this._published(electionId);
-    await this.client.closeElection(r.electionId).catch(asHttp);
+    const info = await this.client.election(r.electionId);
+    if (!PAST_VOTING.has(info.status)) await this.client.closeElection(r.electionId).catch(asHttp);
     return this.view(electionId);
   }
 
@@ -320,6 +324,8 @@ export class RollupService {
   async finalize(electionId) {
     const { r } = this._published(electionId);
     const info = await this.client.election(r.electionId);
+    // Idempotent like close: the tick may have finalized first.
+    if (info.status === 'finalized' || info.status === 'withheld') return this.view(electionId);
     if (info.status !== 'closed') throw new HttpError(409, `the vote is ${info.status}`, { code: 'NOT_CLOSED' });
     const posted = [];
     for (const g of r.guardians) {

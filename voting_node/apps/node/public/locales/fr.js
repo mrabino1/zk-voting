@@ -415,6 +415,7 @@ export default {
     sealedBody: "Les décomptes par choix et les dépouillements partiels restent scellés pour tout le monde, y compris les responsables, jusqu’à la fin de cette élection. La participation horaire est publique.",
     sealedStatus: "Résultats scellés",
     almostLive: "Presque en direct",
+    howBlocksWork: "Comment fonctionnent ces blocs",
     almostLiveBody:
       "Sommes par choix, par heure, pour ce sondage. Le bloc de 08:00–08:59 peut être publié à 09:30, après l’ouverture du seuil de résultats (une fois que 100 votants ont déposé leur premier bulletin, ou à la fin prévue, selon le premier). Les heures de moins de 10 bulletins fusionnent vers l’avant. La série se fige à la clôture. Un bloc publié reste tel qu’il a été publié la première fois. Ces sommes ne sont pas le dépouillement certifié.",
     trailingHelp:

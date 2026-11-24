@@ -415,6 +415,7 @@ export default {
     sealedBody: "Choice counts and partial tallies stay sealed for everyone, including officials, until this election ends. Turnout is visible.",
     sealedStatus: "Results sealed",
     almostLive: "Almost live",
+    howBlocksWork: "How these blocks work",
     almostLiveBody:
       "Hourly choice sums for this poll. A block for 08:00–08:59 can publish at 09:30, after the results gate opens once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first. Hours under 10 ballots merge forward. The series freezes at close. A published block stays as first published. These sums are not the final tally.",
     trailingHelp:

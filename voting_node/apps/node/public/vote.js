@@ -19,7 +19,7 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
-import { contestFacts, contestPanel, contestPhaseStrip, contestPlace, contestSplit, contestTags } from "./contests.js";
+import { contestFacts, contestPhaseStrip, contestPlace, contestTags } from "./contests.js";
 import { electionTypeLabel, electionTypeNameOf, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { freshChoiceRandomness } from "./aggregate-ballot.js";
 import {
@@ -201,59 +201,54 @@ export async function renderVote(main, ctx) {
         source === "sample" ? { text: "Sample ballot" } : null,
       ]),
       contestPhaseStrip(h, election, { tabs: true }),
-      contestSplit(
-        h,
-        contestPanel(
-          h,
-          "Ballot",
-          h("p", {
-            text:
-              state.step === "receipt"
-                ? "Your ballot was accepted. The receipt below cannot prove how you voted."
-                : election.tallyPubKey
-                  ? voteCopy("vote.envelopeHelpTally")
-                  : voteCopy("vote.envelopeHelp"),
-          }),
-          resultsAreSealed(election) ? h("p", { class: "notice", text: sealedUntilLabel(election, formatTime) }) : null,
-          resultsAreSealed(election) ? h("p", { text: t("results.sealedBody") }) : null,
-          h(
-            "p",
-            {},
-            h("a", {
-              href: `/elections/${encodeURIComponent(election.id)}/info`,
-              "data-nav": "",
-              text: "Read candidate and measure information",
-            }),
-            " · ",
-            h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
-          )
-        ),
-        contestPanel(
-          h,
-          "Stage",
-          contestFacts(h, [
-            { label: "Opens", value: formatTime(election.startTime) },
-            { label: "Closes", value: formatTime(election.cutoffTime) },
-            { label: "Count", value: "One person, one vote" },
-            {
-              label: "Questions",
-              value: questions.length ? String(questions.length) : "None published",
-            },
-            election.shortCode ? { label: "Short link", value: `/v/${election.shortCode}` } : null,
-            isRollupVote(election)
-              ? { label: "Runs on", value: `ZkVotingRollup on L1, election ${election.rollupElectionId}` }
-              : null,
-            isRollupVote(election)
-              ? {
-                  label: "Encryption",
-                  value: "Encrypted in your browser to the guardians' joint key. Only the final sum is decrypted, after the cutoff, and L1 checks it.",
-                }
-              : election.tallyPubKey
-                ? { label: "Tally encryption", value: tallyEncryptionBlurb(election) }
-                : null,
-          ])
-        )
-      )
+      state.step === "receipt"
+        ? h("p", { class: "lede", text: "Your ballot was accepted. The receipt below cannot prove how you voted." })
+        : null,
+      contestFacts(h, [
+        { label: "Opens", value: formatTime(election.startTime) },
+        { label: "Closes", value: formatTime(election.cutoffTime) },
+        election.shortCode ? { label: "Short link", value: `/v/${election.shortCode}` } : null,
+      ]),
+      resultsAreSealed(election) ? h("p", { class: "notice", text: sealedUntilLabel(election, formatTime) }) : null,
+      h(
+        "p",
+        { class: "ballot-links" },
+        h("a", {
+          href: `/elections/${encodeURIComponent(election.id)}/info`,
+          "data-nav": "",
+          text: "Read candidate and measure information",
+        }),
+        " · ",
+        h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
+      ),
+      howCounted()
+    );
+  }
+
+  /** Every explanation of how the ballot is counted, behind one disclosure. */
+  function howCounted() {
+    const path = ballotPath(election, source);
+    const facts = contestFacts(h, [
+      isRollupVote(election)
+        ? { label: "Runs on", value: `ZkVotingRollup on L1, election ${election.rollupElectionId}` }
+        : null,
+      isRollupVote(election)
+        ? {
+            label: "Encryption",
+            value: "Encrypted in your browser to the guardians' joint key. Only the final sum is decrypted, after the cutoff, and L1 checks it.",
+          }
+        : election.tallyPubKey
+          ? { label: "Tally encryption", value: tallyEncryptionBlurb(election) }
+          : null,
+    ]);
+    return h(
+      "details",
+      { class: "how-counted" },
+      h("summary", { text: "How this is counted" }),
+      path.kind === "sample" ? null : h("p", {}, h("strong", { text: path.title }), ` ${path.body}`),
+      h("p", { text: election.tallyPubKey ? voteCopy("vote.envelopeHelpTally") : voteCopy("vote.envelopeHelp") }),
+      resultsAreSealed(election) ? h("p", { text: t("results.sealedBody") }) : null,
+      facts
     );
   }
 
@@ -533,11 +528,14 @@ export async function renderVote(main, ctx) {
           h("li", { class: `vote-step is-${s.state}`, ...(s.state === "current" ? { "aria-current": "step" } : {}), text: s.label })
         )
       ),
-      h(
-        "div",
-        { class: `notice vote-path vote-path-${path.kind}`, role: "note" },
-        h("p", {}, h("strong", { text: path.title }), ` ${path.body}`)
-      )
+      // A sample ballot says so up front; a live ballot's path is in "How this is counted".
+      path.kind === "sample"
+        ? h(
+            "div",
+            { class: `notice vote-path vote-path-${path.kind}`, role: "note" },
+            h("p", {}, h("strong", { text: path.title }), ` ${path.body}`)
+          )
+        : null
     );
   }
 

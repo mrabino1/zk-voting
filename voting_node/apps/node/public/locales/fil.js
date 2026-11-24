@@ -415,6 +415,7 @@ export default {
     sealedBody: "Mananatiling selyado ang mga bilang ng pagpipilian at ang bahagyang tally para sa lahat, kasama ang mga opisyal, hanggang matapos ang halalang ito. Pampubliko ang turnout kada oras.",
     sealedStatus: "Selyado ang mga resulta",
     almostLive: "Halos live",
+    howBlocksWork: "Paano gumagana ang mga block na ito",
     almostLiveBody:
       "Mga oras-oras na suma ng pagpipilian para sa poll na ito. Maaaring mailathala ang bloke ng 08:00–08:59 sa 09:30, pagkatapos magbukas ang results gate (kapag nakaboto na ang 100 botante ng kanilang unang balota, o sa nakatakdang wakas, alinman ang mauna). Ang mga oras na wala pang 10 balota ay isinasama pasulong. Nagyeyelo ang serye sa pagsasara. Ang nailathalang bloke ay nananatili sa unang paglalathala. Hindi ito ang sertipikadong tally.",
     trailingHelp:

@@ -415,6 +415,7 @@ export default {
     sealedBody: "Số phiếu theo lựa chọn và kết quả tạm được niêm phong với mọi người, kể cả cán bộ, cho đến khi cuộc bầu cử này kết thúc. Tỷ lệ đi bỏ phiếu theo giờ là công khai.",
     sealedStatus: "Kết quả được niêm phong",
     almostLive: "Gần như trực tiếp",
+    howBlocksWork: "Các khối này hoạt động thế nào",
     almostLiveBody:
       "Tổng lựa chọn theo giờ của thăm dò này. Khối 08:00–08:59 có thể được công bố lúc 09:30, sau khi cổng kết quả mở (khi 100 cử tri đã bỏ lá phiếu đầu tiên của mình, hoặc vào thời điểm kết thúc đã định, cái nào đến trước). Giờ dưới 10 phiếu được gộp về phía trước. Chuỗi đóng băng lúc kết thúc. Khối đã công bố giữ nguyên như lần công bố đầu. Các tổng này không phải kiểm phiếu chứng nhận.",
     trailingHelp:

@@ -3475,17 +3475,11 @@ html[data-client-host="1"] .site-footer {
   border-bottom-color: var(--project);
 }
 
+/* One card per row at every width: elections read as a simple list (voter-page directive). */
 .contest-grid {
   display: grid;
   gap: 0.85rem;
   grid-template-columns: 1fr;
-}
-
-@media (min-width: 860px) {
-  .contest-grid,
-  .app-shell .contest-grid {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 .contest-card-wrap {
@@ -4179,5 +4173,55 @@ html[data-client-host="1"] .site-footer {
   html[data-nav="top"] .site-footer {
     max-width: var(--page);
     margin-inline: auto;
+  }
+}
+
+/* "How this is counted" on the ballot page: every explanation behind one disclosure, so the
+   page shows the ballot first. A rounded card with a pill-shaped summary; tokens only. */
+.how-counted {
+  margin: 0.75rem 0 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-voter-card);
+  background: var(--voter-card-surface);
+  padding: 0 1.25rem;
+}
+
+.how-counted > summary {
+  cursor: pointer;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--voter-label-tracking);
+  font-size: 0.85rem;
+}
+
+.how-counted[open] {
+  padding-bottom: 1rem;
+}
+
+.how-counted > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-bubble);
+}
+
+@media (prefers-contrast: no-preference) {
+  .how-counted {
+    border-color: transparent;
+  }
+}
+
+.ballot-links {
+  margin: 0.5rem 0 0;
+}
+
+/* On a phone the five phase tabs wrap; drop the shared underline so a wrapped row does not
+   look cut off. The current phase keeps its own underline. */
+@media (max-width: 600px) {
+  .phase-tabs {
+    gap: 0.4rem 1rem;
+    border-bottom: 0;
   }
 }

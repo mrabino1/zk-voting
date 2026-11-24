@@ -7,6 +7,8 @@
  * A vote below its anonymity floor (minBallots) is Withheld: no totals are ever published.
  */
 
+import { contestPhaseStrip } from "./contests.js";
+
 /** Plain view model from the /rollup payload and the election's question. Pure; tested. */
 export function rollupResultsModel(view, election) {
   const l1 = view?.l1 || null;
@@ -117,6 +119,7 @@ export async function renderRollupResults(main, ctx, election) {
         h("span", { class: `status-pill ${st.className}`, text: st.label }),
         h("span", { class: "status-pill status-created", text: "Civic vote on L1" })
       ),
+      contestPhaseStrip(h, election, { tabs: true, l1: view?.l1 || (view && !view.published ? { status: "draft" } : null) }),
       m.prompt ? h("p", { class: "lede", text: m.prompt }) : null
     ),
     error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: error })) : null,
