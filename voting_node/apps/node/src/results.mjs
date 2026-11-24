@@ -2,6 +2,8 @@
 // Final tally from a posted tally. Plurality here; ranked questions carry IRV rounds from rankedTally.mjs.
 // A poll may also show almost-live hourly choice sums. A vote does not.
 
+import proofHelpers from '@zk-voting/proof-helpers';
+
 import { presentTally } from './ballot.mjs';
 import { electionState, publicElection } from './electionState.mjs';
 import { electionTypeName, electionTypeOf, isPollElection, sealedResultsBody } from './electionType.mjs';
@@ -407,4 +409,15 @@ export function presentResults(election, deps, opts = {}) {
   };
   if (choiceBlocks) body.choiceBlocks = choiceBlocks;
   return body;
+}
+
+/**
+ * keccak256(abi.encodePacked(32, n, counts…)): the hash of a node-side poll tally.
+ * Civic votes are certified on L1 by ZkVotingRollup.finalizeResult instead.
+ */
+export function tallyCountsHash(counts) {
+  if (!Array.isArray(counts) || counts.length === 0) throw new Error('tallyCountsHash: non-empty counts required');
+  const values = counts.map((n) => BigInt(n));
+  const words = [32n, BigInt(values.length), ...values];
+  return proofHelpers.keccak256(proofHelpers.encodePacked(words.map(() => 'uint256'), words));
 }

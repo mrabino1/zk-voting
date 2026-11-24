@@ -2,7 +2,7 @@
 # Build context is the zk-entropy/ directory (Coolify base directory /zk-entropy,
 # Dockerfile location ceremony/Dockerfile):
 #   docker build -f ceremony/Dockerfile -t zk-entropy-ceremony zk-entropy
-FROM node:22-alpine
+FROM node:22.23.5-alpine
 
 ENV NODE_ENV=production \
     PORT=8080 \

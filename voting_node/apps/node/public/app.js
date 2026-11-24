@@ -41,9 +41,9 @@ import {
   audienceOf,
   homeDestination,
 } from "./audience.js";
-import { footerMetaKey, namedVotingHost, paintClientHost, showsDemoChrome } from "./host-chrome.js";
+import { allowSampleRoll, footerMetaKey, namedVotingHost, paintClientHost, showsDemoChrome } from "./host-chrome.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
-import { civicContestCard } from "./contests.js";
+import { civicContestCard, contestGrid } from "./contests.js";
 import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
 import { renderTerms } from "./terms.js";
 import { renderFeedback } from "./feedback.js";
@@ -198,14 +198,14 @@ export function electionRefEquals(election, ref) {
   const r = String(ref);
   if (String(election.id) === r) return true;
   if (election.shortCode && String(election.shortCode) === r) return true;
-  if (election.onChainElectionId != null && String(election.onChainElectionId) === r) return true;
+  if (election.localElectionId != null && String(election.localElectionId) === r) return true;
   if (Array.isArray(election.aliases) && election.aliases.some((a) => String(a) === r)) return true;
   return false;
 }
 
-export function chainElectionId(election) {
-  if (election?.onChainElectionId != null && String(election.onChainElectionId) !== "") {
-    return String(election.onChainElectionId);
+export function localElectionIdOf(election) {
+  if (election?.localElectionId != null && String(election.localElectionId) !== "") {
+    return String(election.localElectionId);
   }
   return String(election?.id ?? "");
 }
@@ -253,9 +253,9 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
     ...raw,
     id,
     shortCode: raw.shortCode || raw.short_code || null,
-    onChainElectionId:
-      raw.onChainElectionId != null
-        ? String(raw.onChainElectionId)
+    localElectionId:
+      raw.localElectionId != null
+        ? String(raw.localElectionId)
         : raw.on_chain_election_id != null
           ? String(raw.on_chain_election_id)
           : null,
@@ -289,7 +289,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01",
       shortCode: "nbrdge2k3m",
-      onChainElectionId: "1",
+      localElectionId: "1",
       aliases: ["1"],
       title: "City of Northbridge General Municipal Election",
       jurisdiction: "City of Northbridge",
@@ -308,7 +308,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "7a8b9c0d-1e2f-4a3b-9c4d-5e6f70819202",
       shortCode: "ctymeas4n8",
-      onChainElectionId: "2",
+      localElectionId: "2",
       aliases: ["2"],
       title: "County Measure A — Public Library Bond",
       jurisdiction: "Northbridge County",
@@ -326,7 +326,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "4b5c6d7e-8f90-41a2-a3b4-c5d6e7f80903",
       shortCode: "schbrd5p2q",
-      onChainElectionId: "3",
+      localElectionId: "3",
       aliases: ["3"],
       title: "School Board, District 4",
       jurisdiction: "Northbridge Unified School District",
@@ -344,7 +344,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "90ab12cd-34ef-4a56-8b78-90abcdef0404",
       shortCode: "stref6q3r4",
-      onChainElectionId: "4",
+      localElectionId: "4",
       aliases: ["4"],
       title: "Statewide special referendum — transit authority",
       jurisdiction: "State of example",
@@ -362,7 +362,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "11223344-5566-4777-8899-aabbccdde505",
       shortCode: "wrkcbd7s4t",
-      onChainElectionId: "5",
+      localElectionId: "5",
       aliases: ["5"],
       title: "Workers’ cooperative board (annual)",
       jurisdiction: "Northbridge Food Cooperative",
@@ -447,7 +447,7 @@ export function reasonLabel(code) {
 function voterKeys(election) {
   const keys = [String(election.id)];
   if (election.shortCode) keys.push(String(election.shortCode));
-  if (election.onChainElectionId != null) keys.push(String(election.onChainElectionId));
+  if (election.localElectionId != null) keys.push(String(election.localElectionId));
   for (const a of election.aliases || []) keys.push(String(a));
   return keys;
 }
@@ -480,17 +480,19 @@ function voterStatusForElection(election, me, store) {
 }
 
 export async function loadElections() {
+  const named = !allowSampleRoll(chromeHostConfig);
   try {
     const data = await api("/api/elections");
     const list = asList(data).map((row) => normalizeElection(row)).filter(Boolean);
-    if (list.length) return { elections: list, source: "api" };
+    if (list.length || named) return { elections: list, source: "api" };
   } catch {
-    /* Node API may not be serving yet; show the working sample roll. */
+    if (named) return { elections: [], source: "unavailable" };
   }
   return { elections: sampleElections(), source: "sample" };
 }
 
 export async function loadElection(id) {
+  const named = !allowSampleRoll(chromeHostConfig);
   try {
     const data = await api(`/api/elections/${encodeURIComponent(id)}`);
     const raw = data?.election || data;
@@ -499,8 +501,9 @@ export async function loadElection(id) {
       return { election: normalized, source: "api" };
     }
   } catch {
-    /* fall through */
+    if (named) return { election: null, source: "missing" };
   }
+  if (named) return { election: null, source: "missing" };
   const sample = sampleElections().find((e) => electionRefEquals(e, id));
   if (sample) return { election: sample, source: "sample" };
   return { election: null, source: "missing" };
@@ -530,8 +533,12 @@ let chromePollsEnabled = false;
 
 let chromeHostConfig;
 
+export function bindHostConfig(config) {
+  chromeHostConfig = config;
+}
+
 function applyHostChrome(config) {
-  if (config !== undefined) chromeHostConfig = config;
+  if (config !== undefined) bindHostConfig(config);
   const demo = showsDemoChrome(chromeHostConfig);
   const chip = document.getElementById("topbar-demo");
   if (chip) chip.hidden = !demo;
@@ -573,7 +580,7 @@ function ctx() {
     formatTime,
     electionStateInfo,
     electionRefEquals,
-    chainElectionId,
+    localElectionIdOf,
     normalizeElection,
     loadElections,
     loadElection,
@@ -598,49 +605,47 @@ function electionCard(election, me, store) {
   const roll = `${election.participantCount} registered${
     election.maxParticipants ? ` / cap ${election.maxParticipants}` : " (unlimited)"
   }`;
-  return h(
-    "div",
-    { class: "contest-card-wrap" },
-    civicContestCard(h, election, {
-      formatTime,
-      state: st,
-      typeLabel: `${electionTypeLabel(election)} · ${vs.label}`,
-      href: `/vote/${encodeURIComponent(election.id)}`,
-      sealedText: resultsAreSealed(election) ? sealedUntilLabel(election, formatTime) : "",
-      roll,
-      foot: canVote ? "Open · mark a ballot" : vs.label,
-      actions: [
-        canVote
-          ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
-          : vs.key === "recorded"
-            ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
-            : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: election.state === 2 ? "Open ballot" : "Election detail" }),
-        canRegister
-          ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
-          : null,
-        h("a", {
-          class: election.state >= 4 ? "btn" : "btn btn-secondary",
-          href: `/elections/${encodeURIComponent(election.id)}/results`,
-          "data-nav": "",
-          text: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Results" : "Results status",
-        }),
-        h("a", {
-          class: "btn btn-secondary",
-          href: `/elections/${encodeURIComponent(election.id)}/info`,
-          "data-nav": "",
-          text: "Info",
-        }),
-      ],
-    }),
-    aspectPreview(election, h)
-  );
+  const card = civicContestCard(h, election, {
+    formatTime,
+    state: st,
+    typeLabel: `${electionTypeLabel(election)} · ${vs.label}`,
+    href: `/vote/${encodeURIComponent(election.id)}`,
+    sealedText: resultsAreSealed(election) ? sealedUntilLabel(election, formatTime) : "",
+    roll,
+    foot: canVote ? "Open · mark a ballot" : vs.label,
+    actions: [
+      canVote
+        ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
+        : vs.key === "recorded"
+          ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
+          : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: election.state === 2 ? "Open ballot" : "Election detail" }),
+      canRegister
+        ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
+        : null,
+      h("a", {
+        class: election.state >= 4 ? "btn" : "btn btn-secondary",
+        href: `/elections/${encodeURIComponent(election.id)}/results`,
+        "data-nav": "",
+        text: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Results" : "Results status",
+      }),
+      h("a", {
+        class: "btn btn-secondary",
+        href: `/elections/${encodeURIComponent(election.id)}/info`,
+        "data-nav": "",
+        text: "Info",
+      }),
+    ],
+  });
+  // The wrap owns the list item so the question preview is inside it, not a sibling of the list.
+  card.removeAttribute("role");
+  return h("div", { class: "contest-card-wrap", role: "listitem" }, card, aspectPreview(election, h));
 }
 
 function electionGrid(elections, me, store, emptyText) {
   if (!elections.length) {
     return h("div", { class: "notice" }, h("p", { text: emptyText }));
   }
-  return h("div", { class: "contest-grid", role: "list" }, ...elections.map((election) => electionCard(election, me, store)));
+  return contestGrid(h, elections.map((election) => electionCard(election, me, store)));
 }
 
 function renderDesk(main, route, bundle) {

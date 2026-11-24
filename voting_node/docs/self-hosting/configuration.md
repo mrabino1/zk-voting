@@ -54,10 +54,10 @@ Never commit `.env`, and never bake secrets into an image.
 
 | Variable | Purpose |
 | --- | --- |
-| `EXPLORER_INGEST_SECRET` | Shared by `node` and `l2`. Unset in production refuses explorer ingest. |
+| `L2_BALLOT_TOKEN` | Shared by `node` and `l2`: the node's bearer token for the operator's ballot API. `./setup.sh` mints one; Compose refuses to start without it. |
 | `RECEIPT_PDF_SECRET` | Key material for locked receipt and outcome PDFs. Empty: the Node creates one and keeps it in Postgres (`zkv_secrets`), or in `$DATA_DIR/receipt-pdf.secret` without `DATABASE_URL`. |
 | `CREDENTIAL_PROVIDER_SECRET`, `CREDENTIAL_PROVIDER_ID` | Civil-credential connector. Empty secret means manual officer review. |
-| `RELAYER_PRIVATE_KEY`, `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_KEY` | Chain keys. Runtime only. Never in git or an image. |
+| `ROLLUP_PRIVATE_KEY`, `OPERATOR_PRIVATE_KEY` | L1 keys of the node (the jurisdiction's clerk) and of the L2 operator. Runtime only. Never in git or an image. Anvil's public test keys are refused off chain 31337. |
 
 ## Email (AWS SES)
 
@@ -68,34 +68,49 @@ Never commit `.env`, and never bake secrets into an image.
 | `SES_CONFIGURATION_SET`, `SES_ENDPOINT`, `SES_DRY_RUN` | Optional SES tuning. |
 | `REQUIRE_EMAIL_MFA` | Forces MFA in tests. |
 
-## Chain and L2
+## Chain
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `CHAIN_ID` | `27427` | Chain id. Set = fixed by the environment; `/setup` shows it read-only. Empty = the super admin picks it on `/setup` (presets 27427 civic L2, 1 mainnet, 11155111 Sepolia, 31337 local, or custom). The environment always wins over the stored choice. Compose passes the same value to the L2 sequencer as `L2_CHAIN_ID`. Not a positive integer refuses to start. The wallet chain client is built at boot: restart after changing it. |
+| `CHAIN_ID` | `27427` | The node's own chain id (poll signatures, wallets). Set = fixed by the environment; `/setup` shows it read-only. Empty = the super admin picks it on `/setup`. The environment always wins. Not a positive integer refuses to start. Restart after changing it. |
 | `ENTROPY_CEREMONY_URL` | empty | Public entropy ceremony origin (`https://host`, or `http://localhost:…`; a bare host means https). Set = `/setup` step 3 is read-only. Not a valid URL refuses to start. See [`zk-entropy/ceremony`](../../../zk-entropy/ceremony/README.md). |
-| `ZK_ENTROPY` | empty | **Secret.** A `zke1:` entropy string (closed ceremony output or local). Set = wins over the value saved on `/setup` step 4, which then shows it read-only. A bad checksum refuses to start (the value is never logged). Mixed into browser ceremony contributions; see [`ceremony-web.md`](../ceremony-web.md). |
-| `CHAIN_RPC` | `http://l2:8546` | Where the Node reaches the sequencer. Empty runs without a chain. |
-| `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | empty | Pin the one shared deployment. Forks do not redeploy. |
-| `L2_RPC_PORT` | `8546` | Host port for the sequencer. Do not expose publicly. |
-| `L2_BATCH_SIZE`, `L2_SKIP_EMPTY_BLOCKS`, `L2_HEARTBEAT_SECONDS` | `4`, `1`, `3600` | Sequencer tuning. |
-| `DEV_MOCK_PROOF` | `true` | Mock proofs for the demo L2. |
-| `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Hour length for public vote disclosure. `0` publishes immediately (demo only). |
-| `TALLY_CHALLENGE_SECONDS` | `86400` | Wait after cutoff before a tally. Production minimum is 1 hour. Test and development floor is 1 second. A shorter value is raised and logged. |
-| `DISCLOSURE_DELAY_SECONDS` | `1800` | Extra wait after the hour closes. Votes from 08:00–08:59 publish at 09:30. `0` publishes at the hour boundary (demo only). |
-| `RESULTS_MIN_VOTES` | `100` | Poll per-choice counts wait until the gate opens once this many voters have cast their first ballot, or until `cutoffTime`. Turnout does not use this gate. `0` leaves the choice gate open (demo only). |
-| `DISCLOSURE_MIN_BLOCK_VOTES` | `10` | Do not publish a disclosure block smaller than this. Short hours merge forward. A whole election under this floor waits for the final tally. |
-| `ZK_VOTING_NODE_URL` | `http://node:3000` | Where L2 services reach the Node. The name is kept for compatibility. |
-| `L1_RPC`, `L1_CHAIN_ID`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `SETTLEMENT_ADDRESS` | empty | Optional Ethereum L1 certification. Empty is a no-op. |
+| `ZK_ENTROPY` | empty | **Secret.** A `zke1:` entropy string (closed ceremony output or local). Set = wins over the value saved on `/setup` step 4. A bad checksum refuses to start (the value is never logged). See [`ceremony-web.md`](../ceremony-web.md). |
 
-## Archive (S3 / R2)
+## Rollup (civic votes)
+
+Civic votes settle on ZkVotingRollup, one L1 contract shared by every jurisdiction
+([design](../../../smart-contracts/docs/ROLLUP.md)). Polls stay on the node and need none of this.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `ARCHIVE_ENABLED` | `1` | `0` turns the hourly archive off. With no bucket it warns and deletes nothing. |
-| `ARCHIVE_S3_BUCKET`, `ARCHIVE_S3_ENDPOINT`, `ARCHIVE_S3_REGION` | empty, empty, `auto` | Target bucket. A `file://` endpoint archives to disk. |
-| `ARCHIVE_S3_ACCESS_KEY_ID`, `ARCHIVE_S3_SECRET_ACCESS_KEY` | empty | Bucket credentials. |
-| `ARCHIVE_HOT_WINDOW_HOURS`, `ARCHIVE_INTERVAL_SECONDS` | `2`, `3600` | How much stays on the host and how often the job runs. |
+| `COMPOSE_PROFILES` | `local-l1` | Runs the local chain (`l1`, Anvil on 31337) and the one-shot `l1-deploy`. Remove it to use a public chain. |
+| `L1_RPC` | `http://l1:8545` | Ethereum RPC for the node and the operator. |
+| `L1_CHAIN_ID` | empty | Expected L1 chain id; the node refuses an RPC on another chain. Empty = from the deployment file, else the RPC. |
+| `ROLLUP_ADDRESS` | empty | The ZkVotingRollup address. Empty = from `ROLLUP_DEPLOYMENT_FILE`. |
+| `ROLLUP_DEPLOYMENT_FILE` | `/deployments/local.json` | Deployment record written by `l1-deploy` (or `scripts/deploy.sh`): address, chain, jurisdiction. |
+| `ROLLUP_JURISDICTION_ID` | empty | Your jurisdiction (bytes32) on the rollup. Empty = from the deployment file. |
+| `ROLLUP_PRIVATE_KEY` | Anvil key 2 | **Secret.** The node account, your jurisdiction's clerk on L1: publishes, closes and finalizes civic votes. Needs a little ETH; voters never pay. |
+| `ROLLUP_TICK_SECONDS` | `15` | How often the node syncs rolls, closes after the cutoff and finalizes. |
+| `ROLLUP_DEPLOY_BLOCK` | empty (0) | First L1 block of the deployment; where the outcomes monitor's L1 audit starts reading events. Set it on a public chain: many RPCs refuse a log query from block 0. |
+| `L2_URL` | `http://l2:8546` | Where the node reaches the operator. |
+| `OPERATOR_PRIVATE_KEY` | Anvil key 1 | **Secret.** The L2 operator, registered with `setOperator`; pays L1 gas for batches. |
+| `L2_BATCH_SECONDS` | `10` | How often the operator checks for work. |
+| `L2_BATCH_MAX_WAIT_SECONDS` | 0 on chain 31337, 600 elsewhere | How long ballots may wait for a fuller batch. Each batch costs L1 gas; a full batch (256 ballots), a waiting roll change or close, or an approaching cutoff seals at once. |
+| `L2_RPC_PORT`, `L2_RPC_BIND` | `8546`, `127.0.0.1` | Host port and interface for the operator. Its reads (`/v1/status`, `/v1/batches`) are public; the ballot API needs `L2_BALLOT_TOKEN`. |
+| `L1_RPC_PORT` | `8545` | Host loopback port of the local chain. |
+| `ZK_VOTING_ALLOW_MOCK_PROOFS` | `1` on the local stack | Chain 31337 only: the operator accepts ballots without a zero-knowledge eligibility proof (the node's vote pass still gates them). Refused on any other chain. |
+
+## Polls and disclosure
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Hour length for public poll-ballot disclosure. `0` publishes immediately (demo only). |
+| `DISCLOSURE_DELAY_SECONDS` | `1800` | Extra wait after the hour closes. Votes from 08:00–08:59 publish at 09:30. `0` publishes at the hour boundary (demo only). |
+| `DISCLOSURE_MIN_BLOCK_VOTES` | `10` | Do not publish a disclosure block smaller than this. Short hours merge forward. |
+| `RESULTS_MIN_VOTES` | `100` | Poll per-choice counts wait until this many voters have cast, or until `cutoffTime`. `0` leaves them open (demo only). |
+| `TALLY_CHALLENGE_SECONDS` | `86400` | Wait after a poll's cutoff before its tally. Production minimum is 1 hour. |
+
+Civic votes have no interim disclosure: only the final sum is ever decrypted, on L1.
 
 ## Feedback form
 

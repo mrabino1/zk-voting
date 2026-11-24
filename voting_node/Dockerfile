@@ -5,7 +5,7 @@
 # Install npm **workspaces** (`@zk-voting/chain-client` and its in-tree
 # siblings). Those packages are private — they are not on the npm registry.
 
-FROM node:24-bookworm-slim AS deps
+FROM node:24.22.3-bookworm-slim AS deps
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY apps/node/package.json apps/node/package.json
@@ -13,7 +13,7 @@ COPY packages ./packages
 RUN npm ci --omit=dev --no-audit --no-fund \
     && mkdir -p apps/node/node_modules
 
-FROM node:24-bookworm-slim AS runner
+FROM node:24.22.3-bookworm-slim AS runner
 WORKDIR /src
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
@@ -55,17 +55,12 @@ COPY --chown=node:node plugins ./plugins
 COPY --chown=node:node docs/self-hosting ./docs/self-hosting
 # outcomes.mjs imports the offline auditor from the repo-root tools/ path.
 COPY --chown=node:node tools/auditor/verify.mjs ./tools/auditor/verify.mjs
+COPY --chown=node:node tools/auditor/rollup.mjs ./tools/auditor/rollup.mjs
+COPY --chown=node:node l2/rollup/pubdata.mjs ./l2/rollup/pubdata.mjs
 # Fails the image build when a runtime import is missing from this stage.
 COPY --chown=node:node scripts/image-import-smoke.mjs ./scripts/image-import-smoke.mjs
+# The writer lease (src/writerMode.mjs) is the only module the node takes from l2/.
 COPY --chown=node:node l2/lease ./l2/lease
-# Super-admin write:l2 runs the archive job (credentials blanked). That module
-# imports the sequencer state helper and the disclosure clock; nothing else.
-COPY --chown=node:node l2/archive ./l2/archive
-COPY --chown=node:node l2/disclosure.mjs ./l2/disclosure.mjs
-COPY --chown=node:node l2/sequencer/state.mjs ./l2/sequencer/state.mjs
-# L2 identity, operator auth and L1 funding helpers (state.mjs imports adminAuth).
-COPY --chown=node:node l2/adminAuth.mjs l2/identity.mjs ./l2/
-COPY --chown=node:node l2/prover/funding.mjs ./l2/prover/funding.mjs
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 

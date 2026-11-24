@@ -4,9 +4,11 @@
  * winners and ties. A poll may also show almost-live hourly choice sums.
  */
 
-import { civicContestCard } from "./contests.js";
+import { civicContestCard, contestPhaseStrip } from "./contests.js";
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { t } from "./i18n.js";
+import { renderRollupResults } from "./rollup-results.js";
+import { isRollupVote } from "./rollup-vote.js";
 
 function percent(share) {
   if (share == null || !Number.isFinite(Number(share))) return "—";
@@ -243,6 +245,11 @@ export async function renderResults(main, ctx) {
   }
 
   const election = payload;
+  // A civic vote on the rollup has no node tally: its result is the L1 record.
+  if (isRollupVote(election)) {
+    await renderRollupResults(main, ctx, { ...election, id: election.id || election.electionId || electionId });
+    return;
+  }
   const results = payload.results || {};
   const st = electionStateInfo(election.state);
   const sealed = resultsAreSealed(election) || resultsAreSealed(results);
@@ -260,6 +267,7 @@ export async function renderResults(main, ctx) {
           h("span", { class: `status-pill ${st.className}`, text: st.label }),
           h("span", { class: "status-pill status-created", text: electionTypeLabel(election) })
         ),
+        contestPhaseStrip(h, election, { tabs: true }),
         h(
           "ul",
           { class: "meta-list" },
@@ -301,6 +309,7 @@ export async function renderResults(main, ctx) {
           : h("span", { class: "status-pill status-created", text: "No tally yet" }),
         source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
       ),
+      contestPhaseStrip(h, election, { tabs: true }),
       h(
         "ul",
         { class: "meta-list" },
@@ -474,9 +483,14 @@ function choiceBlocksSection(choiceBlocks, h, formatTime) {
     "section",
     { class: "almost-live", "aria-labelledby": "almost-live-heading" },
     h("h2", { id: "almost-live-heading", text: t("results.almostLive") }),
-    h("p", { text: t("results.almostLiveBody") }),
-    h("p", { class: "field-hint", text: t("results.trailingHelp") }),
-    h("p", { class: "field-hint", text: t("results.certifiedSeparate") }),
+    h(
+      "details",
+      { class: "how-counted" },
+      h("summary", { text: t("results.howBlocksWork") }),
+      h("p", { text: t("results.almostLiveBody") }),
+      h("p", { class: "field-hint", text: t("results.trailingHelp") }),
+      h("p", { class: "field-hint", text: t("results.certifiedSeparate") })
+    ),
     ...rows
   );
 }
@@ -486,7 +500,7 @@ export async function renderResultsIndex(main, ctx) {
   const { elections, source } = await loadElections();
   const list =
     elections.length === 0
-      ? h("div", { class: "notice notice-warn" }, h("p", { text: "No elections are published on this Node yet." }))
+      ? h("div", { class: "notice notice-warn" }, h("p", { text: source === "unavailable" ? "The election list could not be loaded." : "No elections are published on this Node yet." }))
       : h(
           "div",
           { class: "contest-grid", role: "list" },

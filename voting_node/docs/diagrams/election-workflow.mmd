@@ -27,30 +27,31 @@ flowchart TB
 
   subgraph Split["Identity is not the ballot"]
     direction LR
-    Person["Person / Node login<br/>email, passkey, wallet, card, license hash<br/>legal roll stays in zk-voting.json"]
-    Gap["no public join key"]
-    PublicBallot["Public ballot record<br/>nullifier + ballotHash + relayer<br/>ciphertext choice — no name, no wallet"]
+    Person["Person / Node login<br/>email, passkey, wallet, card, license hash<br/>the legal roll stays on the Node"]
+    Gap["blind vote pass<br/>no public join key"]
+    PublicBallot["Public ballot record<br/>nullifier + hiding commitment<br/>no name, no wallet, no choice"]
     Person --> Gap --> PublicBallot
   end
 
-  subgraph Life["Election lifecycle"]
+  subgraph Life["Civic vote lifecycle"]
     direction LR
-    Register["1 Register<br/>identityCommitment leaf<br/>into the Merkle tree"]
-    Freeze["2 Freeze roll<br/>eligibleRoot + disqRoot"]
-    Vote["3 Vote<br/>ZK proof + nullifier once<br/>relayer / bundler is msg.sender<br/>paymaster pays L2 gas"]
-    Hour["4 Hourly disclosure<br/>proofs and turnout after<br/>the containing hour closes"]
-    Tally["5 Tally<br/>acceptedBallots =<br/>unique nullifiers"]
-    Results["6 Results<br/>Node /outcomes<br/>optional L1 tally hash"]
-    Register --> Freeze --> Vote --> Hour --> Tally --> Results
+    Publish["1 Publish<br/>createElection on L1<br/>guardians run the key ceremony"]
+    Register["2 Register<br/>identity commitments<br/>through the L1 queue until the start"]
+    Vote["3 Vote<br/>encrypted in the browser<br/>nullifier once, relayed by the Node<br/>batched by the L2 operator"]
+    Close["4 Close<br/>L1 stores the final<br/>encrypted sum"]
+    Decrypt["5 Decrypt the sum<br/>k of n guardians<br/>Withheld below minBallots"]
+    Results["6 Results<br/>totals checked and<br/>certified by L1"]
+    Publish --> Register --> Vote --> Close --> Decrypt --> Results
   end
 
   subgraph Layers["Where it runs"]
     direction LR
-    Node["ZK-Voting Node<br/>clerks, voters, receipts, explorer"]
-    L2["ZK-Voting L2 chainId 27427<br/>register / vote / disqualify / tally"]
-    L1["Ethereum L1<br/>RollupSettlement + L1TallyMirror"]
-    Node -->|"JSON txs"| L2
-    L2 -->|"batch proof / certify"| L1
+    Node["ZK-Voting Node<br/>clerks, voters, receipts, explorer<br/>polls: hourly disclosure and tally"]
+    L2["L2 operator<br/>ballots into batches"]
+    L1["Ethereum L1<br/>ZkVotingRollup, one for the world"]
+    Node -->|"ballots, roll, guardian relays"| L2
+    L2 -->|"batches with proofs"| L1
+    Node -->|"publish, close, finalize"| L1
   end
 
   Split --> Life --> Layers
@@ -58,7 +59,7 @@ flowchart TB
   class Person person
   class PublicBallot ballot
   class Gap join
-  class Register,Freeze,Vote,Hour,Tally,Results step
+  class Publish,Register,Vote,Close,Decrypt,Results step
   class Node node
   class L2 l2
   class L1 l1

@@ -15,7 +15,7 @@ Do not open production deploy PRs against `test/unstable`. Do not merge experime
 
 Feature work may use short-lived branches, but the integration line the host script tracks is `test/unstable`.
 
-Jurisdictions are **meant to fork** this repository: run your own Node, pin the one shared `ElectionFactory`. Do not deploy a new factory per city. Instructions and env template: root [`README.md`](./README.md#intentional-forking), [`.env.example`](./.env.example).
+Jurisdictions are **meant to fork** this repository: run your own Node and, on a public chain, use the one shared ZkVotingRollup deployment. Do not deploy a rollup per city. Guide: [Forking and staying current](./voting_node/docs/self-hosting/forking.md).
 
 ## Operator script
 
@@ -38,14 +38,14 @@ Hosts use [`system_actions.sh`](./system_actions.sh):
 
 | Area | Path | Notes |
 | --- | --- | --- |
-| Spec / product intent | `README.md`, `docs/ARCHITECTURE.md` | Implemented sections must match the tree. Solidity/circuit **interfaces** in ARCHITECTURE are the ABI contract — if those disagree with `smart-contracts/` / `circuits/`, the code is wrong. **Future** is labeled and is not expected to match yet. |
+| Spec / product intent | `README.md`, `docs/ARCHITECTURE.md` | Implemented sections must match the tree. The contract design is `smart-contracts/docs/ROLLUP.md`; if docs disagree with the code, fix the docs. **Future** is labeled and is not expected to match yet. |
 | Solidity | `smart-contracts/src/` | `pragma solidity ^0.8.24`, AGPL, `// NOT FOR PROFIT` on every file. |
-| Foundry tests | `smart-contracts/test/` | Unit, fuzz (`--fuzz-runs 256`), invariants. |
-| Circuits | `circuits/` | Circom 2. Vote hasher is Poseidon(2). Ceremony is not done (`HASH_SCHEME.md`). |
+| Foundry tests | `smart-contracts/test/` | Unit and fuzz tests (`forge test`). |
+| Circuits | `voting_node/circuits/` | Circom 2 poll circuits. Hasher is Poseidon(2). Ceremony is not done (`HASH_SCHEME.md`). |
 | Shared JS | `packages/types`, `proof-helpers`, `chain-client` | JSDoc types; optional `viem`. |
-| Node app | `apps/node/` | JSON API + **vanilla JS** pages in `public/`. JSON store. Footer: NOT FOR PROFIT. |
-| L2 | `l2/` | Civic JSON sequencer + prover, chainId **27427**, RPC **:8546**. Not Anvil. |
-| Docker Compose | `docker-compose.yml`, `Dockerfile`, `l2/Dockerfile` | Host Node + L2. Secrets in `.env`, data on volumes. |
+| Node app | `voting_node/apps/node/` | JSON API + **vanilla JS** pages in `public/`. Postgres or JSON store. Footer: NOT FOR PROFIT. |
+| L2 | `voting_node/l2/rollup/` | The rollup operator, HTTP on **:8546**. |
+| Docker Compose | `voting_node/docker-compose.yml` | Node, operator, Postgres, local L1. Secrets in `.env`, data on volumes. |
 
 Do not put legal names, dates of birth, or street addresses on chain. Do not emit the selected option in an event. Do not print “I voted for X” receipts.
 

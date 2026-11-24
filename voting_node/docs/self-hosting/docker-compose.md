@@ -2,25 +2,29 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-This is the fastest way to run a complete zk-voting Node (web app, API, civic L2, prover, archive) on one machine.
+This is the fastest way to run a complete zk-voting Node on one machine: the web app and API, the rollup operator, Postgres, and (by default) a local Ethereum chain with ZkVotingRollup deployed on it. No paid service and no public chain are needed.
 
 ## 1. Clone and configure
 
 ```bash
 git clone https://github.com/<your-org>/zk-voting.git
-cd zk-voting
-cp .env.example .env
+cd zk-voting/voting_node
+./setup.sh            # or ./setup.sh -y to take every default
 ```
 
-Replace `<your-org>` with the organization you forked into. `.env` is gitignored. The defaults in `.env.example` run a **local demo**: no outbound mail, passkeys on `localhost`, mock proofs on the L2.
+Replace `<your-org>` with the organization you forked into. `./setup.sh` writes `.env`
+(gitignored). Its defaults run a **local demo** with nothing to sign up for: a local Ethereum
+chain with ZkVotingRollup deployed for you, the bundled Postgres with a generated password, no
+outbound mail, passkeys on `localhost`.
 
-Compose will not start until you set the database. There is no default password:
+By hand instead: `cp .env.example .env`, then set the database (there is no default password):
 
 ```env
 POSTGRES_USER=zkvote
 POSTGRES_PASSWORD=<long random string>
 POSTGRES_DB=zkvote
 DATABASE_URL=postgres://zkvote:<same password>@db:5432/zkvote
+L2_BALLOT_TOKEN=<long random string>
 ```
 
 For anything public, also set:
@@ -29,7 +33,6 @@ For anything public, also set:
 VOTE_FQDN=vote.example.org        # bare hostname you control, no https://
 SUPER_ADMIN_EMAIL=clerk@example.org
 # Leave IS_DEMO unset for a real election. IS_DEMO=true only on the public demo.
-EXPLORER_INGEST_SECRET=<long random string>
 RECEIPT_PDF_SECRET=<long random string>
 ```
 
@@ -66,7 +69,7 @@ docker compose down              # stop (volumes are kept)
 ./system_actions.sh status       # host helper: status, logs, health
 ```
 
-`docker compose down -v` **deletes the volumes** and every vote, roll, and block on this host. Do not run it on a real election host.
+`docker compose down -v` **deletes the volumes** and every vote, roll and batch on this host, including the local chain. Do not run it on a real election host.
 
 ## Data
 
@@ -74,9 +77,10 @@ docker compose down              # stop (volumes are kept)
 | --- | --- | --- |
 | `postgres-data` | `/var/lib/postgresql/data` in `db` | Accounts, elections, ballots, receipts. Dump this with `pg_dump` to move it. |
 | `node-data` | `/data` in `node` | Ceremony files, plugin uploads, and the writer lease. App state is in Postgres. |
-| `l2-data` | `/data` in `l2`, `prover`, `archive` | Sealed blocks, proofs, mempool, leases. |
+| `l2-data` | `/data` in `l2` | The operator's state (`rollup-operator.json`): the rollup state tree, ballots not yet in a batch, receipts, batch history. |
+| `l1-data`, `l1-deployment` | `l1`, `l1-deploy` (profile `local-l1`) | The local chain's state and the deployment record. Not used on a public chain. |
 
-Back both up before every upgrade: [Backups](./backups.md).
+Back them up before every upgrade: [Backups](./backups.md).
 
 ## Variants
 

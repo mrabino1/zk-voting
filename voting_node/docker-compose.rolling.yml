@@ -1,57 +1,22 @@
 # NOT FOR PROFIT — civic public good, not a commercial product.
 #
 # Overlap smoke for a Coolify-style rolling update. Start this beside the
-# main compose file so a second sequencer and a second Node mount the same
-# volumes. The second process must stay healthy while mode is standby.
+# main compose file so a second Node mounts the same volume. The second
+# process must stay healthy while mode is standby.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.rolling.yml up -d --no-build l2-next node-next
-#   curl -fsS http://127.0.0.1:8547/health    # "mode":"standby"
+#   docker compose -f docker-compose.yml -f docker-compose.rolling.yml up -d --no-build node-next
 #   curl -fsS http://127.0.0.1:3001/health    # "mode":"standby"
-#   curl -fsS http://127.0.0.1:8546/health    # "mode":"active"
+#   curl -fsS http://127.0.0.1:3000/health    # "mode":"active"
+#
+# There is no l2-next. The rollup operator has no writer lease yet, and two
+# operators on one l2-data volume would commit conflicting batches. Update the
+# l2 service by recreating it (stop, then start). While it is down the node
+# answers ballot submissions with 503 L2_UNREACHABLE and the voter retries;
+# nothing is lost, because a ballot is only accepted once the operator queues it.
 
 name: zk-voting
 
 services:
-  l2-next:
-    image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
-    restart: "no"
-    init: true
-    stop_grace_period: 30s
-    command: ["node", "sequencer/index.mjs"]
-    ports:
-      - "8547:8546"
-    environment:
-      L2_RPC_HOST: "0.0.0.0"
-      L2_RPC_PORT: "8546"
-      L2_DATA_DIR: /data
-      L2_CHAIN_ID: ${CHAIN_ID:-27427}
-      L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
-      L2_SKIP_EMPTY_BLOCKS: ${L2_SKIP_EMPTY_BLOCKS:-1}
-      L2_HEARTBEAT_SECONDS: ${L2_HEARTBEAT_SECONDS:-3600}
-      DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
-      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
-      EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
-      # Same admission and identity as the primary, so a promotion keeps the rules.
-      L2_ADMISSION: ${L2_ADMISSION:-strict}
-      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
-      L2_UUID: ${L2_UUID:-}
-      L2_ID: ${L2_ID:-}
-      L2_OPERATOR_ADDRESS: ${L2_OPERATOR_ADDRESS:-}
-      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
-      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
-      L2_WRITE_RATE_PER_MIN: ${L2_WRITE_RATE_PER_MIN:-0}
-    volumes:
-      - l2-data:/data
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.L2_RPC_PORT||8546)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
-    networks:
-      - zk-voting
-
   node-next:
     image: zk-voting-node:${ZK_VOTING_IMAGE_TAG:-local}
     restart: "no"
@@ -66,7 +31,6 @@ services:
       DATA_DIR: /data
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to postgres://USER:PASSWORD@db:5432/DB}
       CHAIN_ID: ${CHAIN_ID:-27427}
-      CHAIN_RPC: ${CHAIN_RPC:-http://l2:8546}
       VOTE_FQDN: ${VOTE_FQDN:-}
       RP_ID: ${RP_ID:-localhost}
       WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
@@ -76,20 +40,20 @@ services:
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
       # Empty or omitted is a real election. Set true or 1 only on the public demo.
       IS_DEMO: ${IS_DEMO:-}
-      BALLOT_INBOX_ADDRESS: ${BALLOT_INBOX_ADDRESS:-}
-      ELECTION_FACTORY_ADDRESS: ${ELECTION_FACTORY_ADDRESS:-}
-      VERIFIER_ADDRESS: ${VERIFIER_ADDRESS:-}
-      RELAYER_PRIVATE_KEY: ${RELAYER_PRIVATE_KEY:-}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-}
-      EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
-      L1_RPC: ${L1_RPC:-}
-      L1_TALLY_MIRROR_ADDRESS: ${L1_TALLY_MIRROR_ADDRESS:-}
-      L1_PUBLISHER_PRIVATE_KEY: ${L1_PUBLISHER_PRIVATE_KEY:-}
-      L1_SETTLEMENT_ADDRESS: ${L1_SETTLEMENT_ADDRESS:-}
+      # Same rollup settings as the active Node. Standby does not send L1 transactions.
+      L1_RPC: ${L1_RPC:-http://l1:8545}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
+      ROLLUP_ADDRESS: ${ROLLUP_ADDRESS:-}
+      ROLLUP_DEPLOYMENT_FILE: ${ROLLUP_DEPLOYMENT_FILE:-}
+      ROLLUP_JURISDICTION_ID: ${ROLLUP_JURISDICTION_ID:-}
+      ROLLUP_PRIVATE_KEY: ${ROLLUP_PRIVATE_KEY:-}
+      L2_URL: http://l2:8546
+      L2_BALLOT_TOKEN: ${L2_BALLOT_TOKEN:?Set L2_BALLOT_TOKEN}
     volumes:
       - node-data:/data
+      - l1-deployment:/deployments:ro
     depends_on:
       db:
         condition: service_healthy
@@ -104,7 +68,7 @@ services:
 
 volumes:
   node-data:
-  l2-data:
+  l1-deployment:
 
 networks:
   zk-voting:

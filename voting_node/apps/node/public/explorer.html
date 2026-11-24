@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"><img src="/brand-mark.svg" alt="" width="32" height="32" /></span>
           <span class="brand-text">
             <span class="brand-name" title="%BRAND_NAME%">%BRAND_WORDMARK%</span>
-            <span class="brand-sub" data-i18n="chrome.brandSubExplorer">L2 block explorer</span>
+            <span class="brand-sub" data-i18n="chrome.brandSubExplorer">Block explorer</span>
           </span>
         </a>
         <nav class="nav-main" aria-label="Primary" data-i18n-aria-label="chrome.navPrimary">
@@ -45,17 +45,15 @@
 
     <main id="main" class="site-main" tabindex="-1">
       <header class="page-head">
-        <p class="kicker">%BRAND_NAME% L2 · chain 27427</p>
+        <p class="kicker">%BRAND_NAME% explorer</p>
         <h1>Block explorer</h1>
         <p class="lede">
-          Public record of every block: registrations (commitments only), accepted ballots
-          (nullifier + ballot hash — never the choice), disqualifications, tallies, and
-          rollup batches. Vote proofs publish hourly from the first ballot, after the hour that contained them closes
-          and the disclosure delay elapses, once the block floor is met,
-          so a person leaving a voting office cannot be matched to a live jurisdiction tick.
-          The snapshot below is the last published block: disclosed ballot count, when that
-          hour ended, and the countdown to the next update. Choice is never shown here.
-          No ads. No tokens.
+          Two public records. <strong>Rollup batches</strong> show what the operator committed to
+          Ethereum for civic votes: batch roots and counts, never a choice. <strong>Poll blocks</strong>
+          show registrations (commitments only), accepted poll ballots (nullifier + ballot hash),
+          disqualifications and tallies. Poll ballots publish hourly,
+          after the hour that contained them closes and the disclosure delay elapses,
+          so a person leaving a voting office cannot be matched to a live tick. No ads. No tokens.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
           <p class="disclosure-note">
@@ -79,6 +77,7 @@
             />
             <button class="btn" type="submit">Search</button>
             <button class="btn btn-secondary" type="button" id="btn-latest">Latest blocks</button>
+            <a class="btn btn-secondary" id="btn-rollup" href="#/rollup">Rollup batches</a>
           </div>
         </form>
         <p class="field-hint">Press <kbd>/</kbd> to focus search. Vote transactions never include choice plaintext.</p>

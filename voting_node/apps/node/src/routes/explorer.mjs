@@ -1,7 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import { createHash, timingSafeEqual } from 'node:crypto';
-
 import { Router } from 'express';
 
 import { asyncHandler, HttpError } from '../http.mjs';
@@ -9,42 +7,35 @@ import { presentElection, publishDue } from '../electionState.mjs';
 import { refsOf } from '../electionIds.mjs';
 import { uuidParam } from '../recordIds.mjs';
 
-function ingestSecretsEqual(expected, provided) {
-  if (!expected || !provided) return false;
-  const a = createHash('sha256').update(String(expected)).digest();
-  const b = createHash('sha256').update(String(provided)).digest();
-  return timingSafeEqual(a, b);
-}
-
-function ingestSecretFromRequest(req) {
-  const header = req.get('x-zk-voting-ingest-secret');
-  if (header) return String(header).trim();
-  const auth = String(req.get('authorization') || '');
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-  return m ? m[1].trim() : '';
-}
-
 export function explorerRouter(deps) {
-  const { explorer, config, store } = deps;
+  const { explorer, config, store, rollup } = deps;
   const router = Router();
   router.param('id', uuidParam('id'));
 
-  router.post(
-    '/ingest',
+  // Rollup batches, read from the L2 operator. Public: the same data is in L1 pubdata.
+  // No live ballot count: the operator's pending-ballot figure is not passed on.
+  router.get(
+    '/rollup',
     asyncHandler(async (req, res) => {
-      const secret = String(config.explorerIngestSecret || '').trim();
-      const isTest = process.env.NODE_ENV === 'test';
-      if (!secret && !isTest) {
-        throw new HttpError(503, 'EXPLORER_INGEST_SECRET is required', {
-          code: 'INGEST_SECRET_REQUIRED',
-        });
+      if (!rollup?.enabled) {
+        res.json({ nfp: true, configured: false, status: null, batches: [] });
+        return;
       }
-      if (secret && !ingestSecretsEqual(secret, ingestSecretFromRequest(req))) {
-        throw new HttpError(401, 'ingest unauthorized', { code: 'INGEST_UNAUTHORIZED' });
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit || 25)));
+      let status = null;
+      let batches = [];
+      let error = null;
+      try {
+        const [st, list] = await Promise.all([rollup.client.l2Status(), rollup.client.l2Batches(limit)]);
+        if (st) {
+          const { pendingBallots: _hidden, ...rest } = st;
+          status = rest;
+        }
+        batches = Array.isArray(list?.batches) ? list.batches : [];
+      } catch (err) {
+        error = err.message || 'the L2 operator is unreachable';
       }
-      const { now, interval } = await publishDue(deps);
-      const result = await explorer.ingest(req.body || {}, now, interval);
-      res.json({ ok: true, nfp: true, imported: result.imported });
+      res.json({ nfp: true, configured: true, status, batches, error });
     }),
   );
 

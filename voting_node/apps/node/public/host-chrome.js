@@ -14,6 +14,11 @@ export function showsDemoChrome(config) {
   return Boolean(config) && !namedVotingHost(config);
 }
 
+/** The Northbridge sample roll is only for an unnamed demo. A VOTE_FQDN install never shows it. */
+export function allowSampleRoll(config) {
+  return !namedVotingHost(config);
+}
+
 export function footerMetaKey(config) {
   return namedVotingHost(config) ? "chrome.footerMetaHost" : "chrome.footerMeta";
 }

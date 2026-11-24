@@ -1,16 +1,27 @@
 # NOT FOR PROFIT — civic public good, not a commercial product.
 #
-# Host the ZK-Voting Node (API + SPA) and local L2 the same way a frontend
-# repo is hosted: one compose file, images built from this tree, data on
-# volumes, secrets via .env (never baked into the image).
+# Host the ZK-Voting Node (API + SPA) and its L2 rollup operator the same way
+# a frontend repo is hosted: one compose file, images built from this tree,
+# data on volumes, secrets via .env (never baked into the image).
 #
-#   cp .env.example .env    # paste credentials; see README § Copy-paste credentials
+#   ./setup.sh              # or: cp .env.example .env and fill it in
 #   docker compose up -d --build
 #   curl -fsS http://127.0.0.1:3000/health
 #
-# The archive sidecar is on by default. With an empty ARCHIVE_S3_BUCKET and
-# no file:// ARCHIVE_S3_ENDPOINT it warns and does not delete sequencer files.
-# Set ARCHIVE_ENABLED=0 to turn the job off.
+# Services:
+#   node       API + SPA. Polls run here; civic votes are published to L1.
+#   l2         rollup operator: follows ZkVotingRollup on L1, takes ballots from
+#              the node, commits and executes batches.
+#   db         Postgres for node state.
+#   l1         (profile local-l1) Anvil on chain 31337, state on a volume.
+#   l1-deploy  (profile local-l1) one-shot: deploys ZkVotingRollup with
+#              script/DeployLocal.s.sol unless it is already on the chain, and
+#              writes the record the node and l2 read (ROLLUP_DEPLOYMENT_FILE).
+#
+# Local stack: COMPOSE_PROFILES=local-l1 (the .env.example default). On a
+# public chain, unset COMPOSE_PROFILES and set L1_RPC and ROLLUP_ADDRESS to
+# the one shared deployment (tools/deploy). Anvil's dev keys are refused off
+# chain 31337. depends_on `required: false` needs Docker Compose 2.20+.
 #
 # system_actions.sh restart/logs/status pick this file up automatically.
 
@@ -43,7 +54,6 @@ services:
       # Setup entropy (/setup steps 3-4). ZK_ENTROPY is a secret.
       ENTROPY_CEREMONY_URL: ${ENTROPY_CEREMONY_URL:-}
       ZK_ENTROPY: ${ZK_ENTROPY:-}
-      CHAIN_RPC: ${CHAIN_RPC:-http://l2:8546}
       # Product name defaults; Site admin > Branding wins. Empty = "ZK-Voting".
       BRAND_NAME: ${BRAND_NAME:-}
       BRAND_SHORT_NAME: ${BRAND_SHORT_NAME:-}
@@ -61,10 +71,6 @@ services:
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
       # Empty or omitted is a real election. Set true or 1 only on the public demo.
       IS_DEMO: ${IS_DEMO:-}
-      BALLOT_INBOX_ADDRESS: ${BALLOT_INBOX_ADDRESS:-}
-      ELECTION_FACTORY_ADDRESS: ${ELECTION_FACTORY_ADDRESS:-}
-      VERIFIER_ADDRESS: ${VERIFIER_ADDRESS:-}
-      RELAYER_PRIVATE_KEY: ${RELAYER_PRIVATE_KEY:-}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-}
       ALLOW_SMART_CARD_MOCK: ${ALLOW_SMART_CARD_MOCK:-}
@@ -85,24 +91,21 @@ services:
       CREDENTIAL_PROVIDER_ID: ${CREDENTIAL_PROVIDER_ID:-manual}
       RECEIPT_PDF_SECRET: ${RECEIPT_PDF_SECRET:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
-      EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
-      # Tally-hash certification (L1TallyMirror). Unset → no-op. Do not put
-      # mainnet publisher keys in committed Compose files. Not the L2 prover key.
-      L1_RPC: ${L1_RPC:-}
-      L1_TALLY_MIRROR_ADDRESS: ${L1_TALLY_MIRROR_ADDRESS:-}
-      L1_PUBLISHER_PRIVATE_KEY: ${L1_PUBLISHER_PRIVATE_KEY:-}
-      L1_SETTLEMENT_ADDRESS: ${L1_SETTLEMENT_ADDRESS:-}
+      # ZkVotingRollup (smart-contracts/docs/ROLLUP.md). The node account is the
+      # jurisdiction's clerk on L1: it publishes, closes and finalizes civic votes.
+      L1_RPC: ${L1_RPC:-http://l1:8545}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
-      # L2 identity (read-only here: no L1 submitter key in the Node container).
-      # GET /api/l2/identity and /api/l2/:l2Id/elections/:uuid/results.
-      L2_UUID: ${L2_UUID:-}
-      L2_ID: ${L2_ID:-}
-      L2_OPERATOR_ADDRESS: ${L2_OPERATOR_ADDRESS:-}
-      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
-      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
-      L2_CIVIC_RPC: ${L2_CIVIC_RPC:-http://l2:8546}
+      ROLLUP_ADDRESS: ${ROLLUP_ADDRESS:-}
+      ROLLUP_DEPLOYMENT_FILE: ${ROLLUP_DEPLOYMENT_FILE:-}
+      ROLLUP_JURISDICTION_ID: ${ROLLUP_JURISDICTION_ID:-}
+      ROLLUP_PRIVATE_KEY: ${ROLLUP_PRIVATE_KEY:-}
+      ROLLUP_TICK_SECONDS: ${ROLLUP_TICK_SECONDS:-15}
+      ROLLUP_DEPLOY_BLOCK: ${ROLLUP_DEPLOY_BLOCK:-}
+      L2_URL: http://l2:8546
+      L2_BALLOT_TOKEN: ${L2_BALLOT_TOKEN:?Set L2_BALLOT_TOKEN (./setup.sh mints one)}
     volumes:
       - node-data:/data
+      - l1-deployment:/deployments:ro
     depends_on:
       db:
         condition: service_healthy
@@ -133,37 +136,36 @@ services:
     cpus: 1.0
     init: true
     stop_grace_period: 30s
-    command: ["node", "sequencer/index.mjs"]
-    # The sequencer JSON-RPC accepts eth_sendRawTransaction with no auth, and
-    # the node reaches it on the compose network (http://l2:8546). Publish it
-    # on the host loopback only; set L2_RPC_BIND=0.0.0.0 to expose it on purpose.
+    command: ["node", "rollup/main.mjs"]
+    # The ballot API needs L2_BALLOT_TOKEN, and the node reaches it on the compose
+    # network (http://l2:8546). Publish it on the host loopback only; set
+    # L2_RPC_BIND=0.0.0.0 to expose the public reads (/v1/status, /v1/batches) on purpose.
     ports:
       - "${L2_RPC_BIND:-127.0.0.1}:${L2_RPC_PORT:-8546}:8546"
     environment:
       L2_RPC_HOST: "0.0.0.0"
       L2_RPC_PORT: "8546"
       L2_DATA_DIR: /data
-      L2_CHAIN_ID: ${CHAIN_ID:-27427}
-      L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
-      L2_SKIP_EMPTY_BLOCKS: ${L2_SKIP_EMPTY_BLOCKS:-1}
-      L2_HEARTBEAT_SECONDS: ${L2_HEARTBEAT_SECONDS:-3600}
-      DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
-      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
-      EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
-      # L2 identity + admission (voting_node/docs/L2-IDENTITY-AND-SETTLEMENT.md).
-      # strict: only operator-signed admin txs, only opened election UUIDs,
-      # only votes bound to an approved eligibility root.
-      L2_ADMISSION: ${L2_ADMISSION:-strict}
-      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
-      L2_UUID: ${L2_UUID:-}
-      L2_ID: ${L2_ID:-}
-      L2_OPERATOR_ADDRESS: ${L2_OPERATOR_ADDRESS:-}
+      L1_RPC: ${L1_RPC:-http://l1:8545}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
-      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
-      L2_WRITE_RATE_PER_MIN: ${L2_WRITE_RATE_PER_MIN:-0}
+      ROLLUP_ADDRESS: ${ROLLUP_ADDRESS:-}
+      ROLLUP_DEPLOYMENT_FILE: ${ROLLUP_DEPLOYMENT_FILE:-}
+      # An operator registered on the rollup (setOperator). Pays L1 gas for batches.
+      OPERATOR_PRIVATE_KEY: ${OPERATOR_PRIVATE_KEY:?Set OPERATOR_PRIVATE_KEY}
+      L2_BALLOT_TOKEN: ${L2_BALLOT_TOKEN:?Set L2_BALLOT_TOKEN (./setup.sh mints one)}
+      L2_BATCH_SECONDS: ${L2_BATCH_SECONDS:-10}
+      # Empty = 0 on chain 31337, 600 elsewhere. Each batch costs L1 gas.
+      L2_BATCH_MAX_WAIT_SECONDS: ${L2_BATCH_MAX_WAIT_SECONDS:-}
+      # Chain 31337 only: accept ballots without a zero-knowledge eligibility proof
+      # (the node's vote pass still gates them). The operator refuses it elsewhere.
+      ZK_VOTING_ALLOW_MOCK_PROOFS: ${ZK_VOTING_ALLOW_MOCK_PROOFS:-}
     volumes:
       - l2-data:/data
+      - l1-deployment:/deployments:ro
+    depends_on:
+      l1-deploy:
+        condition: service_completed_successfully
+        required: false
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.L2_RPC_PORT||8546)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -178,47 +180,28 @@ services:
     networks:
       - zk-voting
 
-  prover:
-    build:
-      context: .
-      dockerfile: l2/Dockerfile
-    image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
-    container_name: zk-voting-prover
+  # Local L1 (chain 31337). Its RPC has no auth and its dev keys are public:
+  # it binds the host loopback only. State survives restarts on l1-data.
+  l1:
+    profiles: ["local-l1"]
+    image: ghcr.io/foundry-rs/foundry:v1.10.0@sha256:03ca6dc0accb53b6f67278b5a1c70bef984d5a2a2bcb197298c3b6f3b929c798
+    container_name: zk-voting-l1
     restart: unless-stopped
-    mem_limit: 4g
-    cpus: 2.0
     init: true
-    stop_grace_period: 30s
-    command: ["node", "prover/index.mjs"]
-    environment:
-      L2_RPC_URL: http://l2:8546
-      L2_DATA_DIR: /data
-      L2_CHAIN_ID: ${CHAIN_ID:-27427}
-      L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
-      DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
-      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
-      L1_RPC: ${L1_RPC:-}
-      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
-      SETTLEMENT_ADDRESS: ${SETTLEMENT_ADDRESS:-}
-      # The L2 operator's L1 key (minimal ETH; pays batch gas). PRIVATE_KEY is the legacy name.
-      L1_SUBMITTER_PRIVATE_KEY: ${L1_SUBMITTER_PRIVATE_KEY:-${PRIVATE_KEY:-}}
-      L1_SUBMITTER_MIN_BATCHES: ${L1_SUBMITTER_MIN_BATCHES:-20}
-      L1_SUBMITTER_GAS_PER_BATCH: ${L1_SUBMITTER_GAS_PER_BATCH:-250000}
-      L2_ADMISSION: ${L2_ADMISSION:-strict}
-      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
-      L2_UUID: ${L2_UUID:-}
-      L2_SALT: ${L2_SALT:-}
-      L2_ID: ${L2_ID:-}
-      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
+    # Root only so Anvil can write its state to a fresh named volume.
+    user: "0:0"
+    entrypoint: ["anvil"]
+    command: ["--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337", "--state", "/data/anvil-state.json", "--state-interval", "30"]
+    ports:
+      - "127.0.0.1:${L1_RPC_PORT:-8545}:8545"
     volumes:
-      - l2-data:/data
-    depends_on:
-      l2:
-        condition: service_healthy
-    # Worker: do not inherit the sequencer image HEALTHCHECK on :8546.
+      - l1-data:/data
     healthcheck:
-      disable: true
+      test: ["CMD", "cast", "chain-id", "--rpc-url", "http://127.0.0.1:8545"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
     logging:
       driver: json-file
       options:
@@ -227,51 +210,46 @@ services:
     networks:
       - zk-voting
 
-  # Hourly L2 attic. Default ARCHIVE_ENABLED=1. With no bucket and no
-  # file:// sink the daemon warns and does not touch sequencer files.
-  # When a store is set, sealed hours older than the hot window go to
-  # S3 / R2 (gzip by default); the VPS keeps recent blocks + head/mempool/sealed.
-  # ARCHIVE_ENABLED=0 turns the job off.
-  archive:
-    build:
-      context: .
-      dockerfile: l2/Dockerfile
-    image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
-    container_name: zk-voting-archive
-    restart: unless-stopped
-    mem_limit: 2g
-    cpus: 1.0
-    init: true
-    stop_grace_period: 30s
-    command: ["node", "archive/cli.mjs", "daemon"]
+  # One-shot deploy of ZkVotingRollup to the local L1. Skips when the recorded
+  # address already has code. Compiles from ../smart-contracts (needs network
+  # once, to fetch solc). Deployer = Anvil account 0 (governor), operator =
+  # account 1, node clerk = account 2: their keys are public test keys.
+  l1-deploy:
+    profiles: ["local-l1"]
+    image: ghcr.io/foundry-rs/foundry:v1.10.0@sha256:03ca6dc0accb53b6f67278b5a1c70bef984d5a2a2bcb197298c3b6f3b929c798
+    container_name: zk-voting-l1-deploy
+    restart: "no"
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        rpc=http://l1:8545
+        if [ -f /deployments/local.json ]; then
+          addr=$$(tr -d ' \n' < /deployments/local.json | sed -n 's/.*"rollup":"\(0x[0-9a-fA-F]\{40\}\)".*/\1/p')
+          if [ -n "$$addr" ] && [ "$$(cast code "$$addr" --rpc-url "$$rpc")" != "0x" ]; then
+            echo "ZkVotingRollup already deployed at $$addr"
+            exit 0
+          fi
+        fi
+        rm -rf /work && cp -r /contracts /work && rm -rf /work/out /work/cache /work/broadcast /work/deployments
+        mkdir -p /work/deployments
+        cd /work
+        forge script script/DeployLocal.s.sol --rpc-url "$$rpc" --broadcast --slow
+        cp deployments/local.json /deployments/local.json.tmp
+        mv /deployments/local.json.tmp /deployments/local.json
+        cat /deployments/local.json
     environment:
-      L2_DATA_DIR: /data
-      L2_CHAIN_ID: ${CHAIN_ID:-27427}
-      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      ARCHIVE_ENABLED: ${ARCHIVE_ENABLED:-1}
-      ARCHIVE_COMPRESS: ${ARCHIVE_COMPRESS:-1}
-      ARCHIVE_S3_BUCKET: ${ARCHIVE_S3_BUCKET:-}
-      ARCHIVE_S3_ENDPOINT: ${ARCHIVE_S3_ENDPOINT:-}
-      ARCHIVE_S3_REGION: ${ARCHIVE_S3_REGION:-auto}
-      ARCHIVE_S3_ACCESS_KEY_ID: ${ARCHIVE_S3_ACCESS_KEY_ID:-}
-      ARCHIVE_S3_SECRET_ACCESS_KEY: ${ARCHIVE_S3_SECRET_ACCESS_KEY:-}
-      ARCHIVE_HOT_WINDOW_HOURS: ${ARCHIVE_HOT_WINDOW_HOURS:-2}
-      ARCHIVE_EXPLORER_SNAPSHOT: ${ARCHIVE_EXPLORER_SNAPSHOT:-0}
-      ARCHIVE_NODE_DATA_DIR: /node-data
-      ARCHIVE_INTERVAL_SECONDS: ${ARCHIVE_INTERVAL_SECONDS:-3600}
+      OPERATOR: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+      CLERK: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
     volumes:
-      - l2-data:/data
-      - node-data:/node-data:ro
+      - ../smart-contracts:/contracts:ro
+      - l1-deployment:/deployments
     depends_on:
-      l2:
+      l1:
         condition: service_healthy
     healthcheck:
       disable: true
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     networks:
       - zk-voting
 
@@ -306,6 +284,8 @@ services:
 volumes:
   node-data:
   l2-data:
+  l1-data:
+  l1-deployment:
   postgres-data:
 
 networks:

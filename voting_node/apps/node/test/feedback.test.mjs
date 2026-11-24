@@ -128,7 +128,7 @@ describe('POST /api/feedback', { concurrency: false }, () => {
       const ok = await api(app, payload(app));
       assert.equal(ok.status, 200);
       assert.equal(ok.json.ok, true);
-      assert.equal(ok.json.termsVersion, '2');
+      assert.equal(ok.json.termsVersion, getTermsDocument().version);
       assert.equal(ok.json.termsPdfSha256, getTermsDocument().pdfSha256);
       assert.equal(app.mailer.lastFeedback().to, 'operator@example.gov');
     } finally {
@@ -320,7 +320,7 @@ describe('POST /api/feedback', { concurrency: false }, () => {
       assert.equal(mail.to, 'operator@example.gov');
       assert.match(mail.html, /Suggestion/);
       assert.match(mail.text, /Add a larger skip link/);
-      assert.match(mail.text, /Terms version: 2/);
+      assert.ok(mail.text.includes(`Terms version: ${getTermsDocument().version}`), mail.text);
     } finally {
       console.warn = orig;
       await closeApp(dry);

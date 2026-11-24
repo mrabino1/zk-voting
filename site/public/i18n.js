@@ -17,6 +17,16 @@ import fr from "./locales/fr.js";
 import ko from "./locales/ko.js";
 import pt from "./locales/pt.js";
 import hi from "./locales/hi.js";
+import faqEn from "./locales/faq/en.js";
+import faqEs from "./locales/faq/es.js";
+import faqZh from "./locales/faq/zh.js";
+import faqFil from "./locales/faq/fil.js";
+import faqVi from "./locales/faq/vi.js";
+import faqAr from "./locales/faq/ar.js";
+import faqFr from "./locales/faq/fr.js";
+import faqKo from "./locales/faq/ko.js";
+import faqPt from "./locales/faq/pt.js";
+import faqHi from "./locales/faq/hi.js";
 
 export const LOCALE_CODES = Object.freeze(["en", "es", "zh", "fil", "vi", "ar", "fr", "ko", "pt", "hi"]);
 export const HTML_LANG = Object.freeze({
@@ -63,6 +73,23 @@ const NAVIGATOR_PREFIXES = Object.freeze({
 });
 
 const CATALOGS = { en, es, zh, fil, vi, ar, fr, ko, pt, hi };
+/** FAQ pages are a second catalog so landing-page key parity stays on index.html. */
+const FAQ_CATALOGS = {
+  en: faqEn,
+  es: faqEs,
+  zh: faqZh,
+  fil: faqFil,
+  vi: faqVi,
+  ar: faqAr,
+  fr: faqFr,
+  ko: faqKo,
+  pt: faqPt,
+  hi: faqHi,
+};
+
+function lookupCatalog(code, key) {
+  return lookup(CATALOGS[code], key) ?? lookup(FAQ_CATALOGS[code], key);
+}
 const FLOW_LANE_SHIFT = 236;
 
 export function catalogs() {
@@ -255,7 +282,7 @@ export function safeHtml(template) {
 
 export function translate(locale, key, brand = DEFAULT_BRAND_NAME) {
   const code = isLocale(locale) ? locale : "en";
-  const template = lookup(CATALOGS[code], key) ?? lookup(CATALOGS.en, key) ?? key;
+  const template = lookupCatalog(code, key) ?? lookupCatalog("en", key) ?? key;
   return interpolate(template, { brand });
 }
 

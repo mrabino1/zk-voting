@@ -87,7 +87,7 @@ describe('role-promotion mail templates', () => {
       assert.match(rendered.subject, /ZK-Voting/);
       assert.match(rendered.text, /NOT FOR PROFIT/);
       assert.match(rendered.text, /not a vote receipt/i);
-      assert.match(rendered.text, /civic L2/i);
+      assert.match(rendered.text, /never written on chain/i);
       assert.match(rendered.html, /NOT FOR PROFIT/);
       assert.match(rendered.html, /not a vote receipt/i);
       assert.doesNotMatch(rendered.html, /<script>/);
@@ -180,7 +180,7 @@ describe('role-promotion mail API', () => {
     const { status, json } = await api('GET', '/api/config');
     assert.equal(status, 200);
     assert.equal(json.mail.webhookConfigured, true);
-    assert.match(json.mail.note, /civic L2/);
+    assert.match(json.mail.note, /never written on chain/);
   });
 
   test('unauthenticated template list is 401', async () => {

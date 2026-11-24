@@ -4,10 +4,11 @@
  * First-run setup steps 5 and 6 (plugged into setup.js via ctx.setupExtraSteps):
  *   5. Site and environment: what ./setup.sh (voting_node/.env) set for this
  *      deployment, read-only, plus the product name (saved in the app).
- *   6. L2 identity and L1 funding: GET /api/l2/identity?funding=1, with a
- *      warning when the L1 submitter balance is low or empty.
- * Secrets (setup token, database URL, L2_SALT, L2_ADMIN_SECRET,
- * L1_SUBMITTER_PRIVATE_KEY) never reach this page; they live in env only.
+ *   6. Rollup connection: GET /api/setup/rollup. ZkVotingRollup address, L1
+ *      chain, the node account and its L1 balance (warning when low or empty),
+ *      and whether the L2 operator answers.
+ * Secrets (setup token, database URL, ROLLUP_PRIVATE_KEY, L2_BALLOT_TOKEN)
+ * never reach this page; they live in env only.
  */
 
 const RERUN = "./setup.sh";
@@ -80,84 +81,94 @@ function siteStep(ctx) {
   );
 }
 
-function fundingNotice(h, f) {
-  if (!f) return null;
-  const cls = f.level === "ok" ? "notice notice-ok" : f.level === "low" || f.level === "empty" ? "notice notice-warn" : "notice";
-  const title = f.level === "low" || f.level === "empty" ? `Warning: L1 balance ${f.level}. ` : "";
-  return h("div", { class: cls, role: f.level === "low" || f.level === "empty" ? "alert" : "status", id: "setup-l2-funding" }, h("p", {}, title ? h("strong", { text: title }) : null, f.message || f.level));
+function formatEth(wei) {
+  const w = BigInt(wei || 0);
+  const whole = w / 10n ** 18n;
+  const frac = (w % 10n ** 18n).toString().padStart(18, "0").slice(0, 6);
+  return `${whole}.${frac} ETH`;
 }
 
-function l2Step(ctx) {
+function fundingNotice(h, f) {
+  if (!f) return null;
+  const warn = f.level === "low" || f.level === "empty";
+  const text =
+    f.level === "ok"
+      ? `Node account funded: ${formatEth(f.balanceWei)} (about ${f.callsLeft} L1 calls).`
+      : f.level === "low"
+        ? `Node account balance is low: ${formatEth(f.balanceWei)} covers about ${f.callsLeft} L1 calls. Top it up before publishing votes.`
+        : `Node account cannot pay for an L1 call: ${formatEth(f.balanceWei)}. Publishing and finalizing votes will fail until it is funded.`;
+  return h(
+    "div",
+    { class: warn ? "notice notice-warn" : "notice notice-ok", role: warn ? "alert" : "status", id: "setup-rollup-funding" },
+    h("p", {}, warn ? h("strong", { text: `Warning: L1 balance ${f.level}. ` }) : null, text)
+  );
+}
+
+function rollupStep(ctx) {
   const { h, state, isSuper, paint, stepBadge } = ctx;
   const s = state.status;
-  const id = state.l2;
-  const head = h("h2", { id: "setup-l2-h" }, stepBadge(6, Boolean(id?.configured && id?.funding?.level === "ok")), " L2 identity and L1 funding");
-  const load = async (funding) => {
-    state.l2Busy = true;
+  const r = state.rollup;
+  const done = Boolean(r?.configured && r?.l2Reachable && r?.funding?.level === "ok");
+  const head = h("h2", { id: "setup-rollup-h" }, stepBadge(6, done), " Rollup connection");
+  const load = async () => {
+    state.rollupBusy = true;
     paint();
     try {
-      const res = await fetch(`/api/l2/identity${funding ? "?funding=1" : ""}`, { headers: { accept: "application/json" }, credentials: "same-origin" });
-      state.l2 = await res.json();
-      state.l2Error = res.ok ? "" : state.l2?.error || `HTTP ${res.status}`;
+      const res = await fetch("/api/setup/rollup", { headers: { accept: "application/json" }, credentials: "same-origin" });
+      state.rollup = await res.json();
+      state.rollupError = res.ok ? "" : state.rollup?.error || `HTTP ${res.status}`;
     } catch (err) {
-      state.l2Error = err?.message || "Could not reach /api/l2/identity.";
+      state.rollupError = err?.message || "Could not reach /api/setup/rollup.";
     } finally {
-      state.l2Busy = false;
+      state.rollupBusy = false;
       paint();
     }
   };
-  if (isSuper() && state.l2 === undefined && !state.l2Busy) {
-    state.l2 = null;
-    queueMicrotask(() => load(true));
+  if (isSuper() && state.rollup === undefined && !state.rollupBusy) {
+    state.rollup = null;
+    queueMicrotask(load);
   }
   if (!isSuper()) {
-    return h("section", { class: "panel setup-step", "aria-labelledby": "setup-l2-h" }, head, h("p", { class: "field-hint", text: s?.setupComplete ? "Setup is finished." : "Create the super admin first." }));
+    return h("section", { class: "panel setup-step", "aria-labelledby": "setup-rollup-h" }, head, h("p", { class: "field-hint", text: s?.setupComplete ? "Setup is finished." : "Create the super admin first." }));
   }
+  const yesNo = (v) => (v == null ? null : v ? "yes" : "no");
   return h(
     "section",
-    { class: `panel setup-step${id?.configured ? " is-done" : ""}`, "aria-labelledby": "setup-l2-h" },
+    { class: `panel setup-step${done ? " is-done" : ""}`, "aria-labelledby": "setup-rollup-h" },
     head,
     h(
       "p",
       {},
-      "Voters never pay. The operator key (",
-      h("code", { text: "L1_SUBMITTER_PRIVATE_KEY" }),
-      ") pays L1 gas for vote batches, so keep a little ETH on it. ",
+      "Civic votes settle on ZkVotingRollup, the one L1 contract every jurisdiction shares. Polls stay on this node. Voters never pay: this node's account (",
+      h("code", { text: "ROLLUP_PRIVATE_KEY" }),
+      ") pays L1 gas to publish, close and finalize votes, and the L2 operator pays for vote batches. ",
       h("code", { text: RERUN }),
-      " mints L2_UUID, L2_SALT and L2_ADMIN_SECRET and derives L2_ID; they stay in the environment and are never shown here."
+      " writes these settings to the environment; keys are never shown here."
     ),
-    state.l2Error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.l2Error })) : null,
-    !id
+    state.rollupError ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.rollupError })) : null,
+    !r
       ? h("p", { class: "muted", text: "Loading…" })
       : h(
           "div",
           { class: "stack" },
           h(
             "dl",
-            { class: "status-dl", id: "setup-l2-identity" },
-            ...row(h, "L2_ID", id.l2Id ? h("code", { text: id.l2Id }) : null),
-            ...row(h, "L2_UUID", id.l2Uuid ? h("code", { text: id.l2Uuid }) : null),
-            ...row(h, "Operator", id.operator ? h("code", { text: id.operator }) : null),
-            ...row(h, "Submitter key", id.submitterKeySet ? "set (not shown)" : "not set"),
-            ...row(h, "Operator admin writes", id.adminWritesEnabled ? "enabled (L2_ADMIN_SECRET set)" : "off (L2_ADMIN_SECRET not set)"),
-            ...row(h, "L1 status", id.l1Status === "configured" ? "configured" : "L1 addresses not published yet")
+            { class: "status-dl", id: "setup-rollup-status" },
+            ...row(h, "Rollup contract", r.address ? h("code", { text: r.address }) : null),
+            ...row(h, "L1 chain id", r.chainId != null ? String(r.chainId) : null),
+            ...row(h, "Jurisdiction id", r.jurisdictionId ? h("code", { text: r.jurisdictionId }) : null),
+            ...row(h, "Node account", r.nodeAccount ? h("code", { text: r.nodeAccount }) : null),
+            ...row(h, "Node key", r.keySet ? "set (not shown)" : null),
+            ...row(h, "L2 operator", r.l2Url ? h("code", { text: r.l2Url }) : null),
+            ...row(h, "L2 reachable", yesNo(r.l2Reachable))
           ),
-          id.problems?.length
-            ? h("div", { class: "notice notice-warn", role: "status" }, h("p", { text: "Identity not complete: " }), h("ul", {}, ...id.problems.map((p) => h("li", { text: p }))))
+          r.problems?.length
+            ? h("div", { class: "notice notice-warn", role: "status" }, h("p", { text: "Not connected yet:" }), h("ul", {}, ...r.problems.map((p) => h("li", { text: p }))))
             : null,
-          fundingNotice(h, id.funding),
-          h(
-            "p",
-            { class: "field-hint" },
-            "Re-check from a shell with ",
-            h("code", { text: "npm run l2:identity -- show" }),
-            " and ",
-            h("code", { text: "npm run l2:identity -- check-funding" }),
-            "."
-          ),
-          h("div", { class: "actions" }, h("button", { class: "btn btn-secondary", type: "button", disabled: state.l2Busy, onClick: () => load(true), text: state.l2Busy ? "Checking…" : "Check funding" }))
+          fundingNotice(h, r.funding),
+          h("div", { class: "actions" }, h("button", { class: "btn btn-secondary", type: "button", disabled: state.rollupBusy, onClick: load, text: state.rollupBusy ? "Checking…" : "Check again" }))
         )
   );
 }
 
-export const siteSetupSteps = [siteStep, l2Step];
+export const siteSetupSteps = [siteStep, rollupStep];

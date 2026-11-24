@@ -3,7 +3,6 @@
  * Ballot UI: every aspect on one envelope. After accept, do not print selections.
  */
 
-import { brandName } from "./brand.js";
 import { expectedCountLength, openingIndexFromAnswers } from "./tally-crypto.js";
 import { proveVote } from "./vote-proof.js";
 import { encryptRankingEnvelope } from "./ranked-envelope.js";
@@ -20,11 +19,20 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
-import { contestFacts, contestPanel, contestPlace, contestSplit, contestTags } from "./contests.js";
+import { contestFacts, contestPhaseStrip, contestPlace, contestTags } from "./contests.js";
 import { electionTypeLabel, electionTypeNameOf, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { freshChoiceRandomness } from "./aggregate-ballot.js";
+import {
+  describeRollupReceipt,
+  encryptRollupBallot,
+  fetchRollupReceipt,
+  isRollupVote,
+  loadBallotContext,
+  rollupChoiceIndex,
+} from "./rollup-vote.js";
 
-import { receiptHelpKey, t } from "./i18n.js";
+import { ballotPath, voteBlockers, voteSteps } from "./vote-flow.js";
+import { t } from "./i18n.js";
 import { SEALED_RANKED_DISCLOSURE_KEY } from "./sealed-ranked-disclosure.js";
 
 function tallyEncryptionBlurb(election) {
@@ -129,7 +137,7 @@ export async function renderVote(main, ctx) {
     formatTime,
     electionStateInfo,
     electionId,
-    chainElectionId,
+    localElectionIdOf,
     SAMPLE_QUESTIONS: sampleQs,
   } = ctx;
 
@@ -192,50 +200,55 @@ export async function renderVote(main, ctx) {
         { text: "One person, one vote" },
         source === "sample" ? { text: "Sample ballot" } : null,
       ]),
-      contestSplit(
-        h,
-        contestPanel(
-          h,
-          "Ballot",
-          h("p", {
-            text:
-              state.step === "receipt"
-                ? "Your ballot was accepted. The receipt below cannot prove how you voted."
-                : election.tallyPubKey
-                  ? voteCopy("vote.envelopeHelpTally")
-                  : voteCopy("vote.envelopeHelp"),
-          }),
-          resultsAreSealed(election) ? h("p", { class: "notice", text: sealedUntilLabel(election, formatTime) }) : null,
-          resultsAreSealed(election) ? h("p", { text: t("results.sealedBody") }) : null,
-          h(
-            "p",
-            {},
-            h("a", {
-              href: `/elections/${encodeURIComponent(election.id)}/info`,
-              "data-nav": "",
-              text: "Read candidate and measure information",
-            }),
-            " · ",
-            h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
-          )
-        ),
-        contestPanel(
-          h,
-          "Stage",
-          contestFacts(h, [
-            { label: "Opens", value: formatTime(election.startTime) },
-            { label: "Closes", value: formatTime(election.cutoffTime) },
-            { label: "Count", value: "One person, one vote" },
-            {
-              label: "Questions",
-              value: questions.length ? String(questions.length) : "None published",
-            },
-            election.shortCode ? { label: "Short link", value: `/v/${election.shortCode}` } : null,
-            election.onChainElectionId ? { label: "On-chain id", value: String(election.onChainElectionId) } : null,
-            election.tallyPubKey ? { label: "Tally encryption", value: tallyEncryptionBlurb(election) } : null,
-          ])
-        )
-      )
+      contestPhaseStrip(h, election, { tabs: true }),
+      state.step === "receipt"
+        ? h("p", { class: "lede", text: "Your ballot was accepted. The receipt below cannot prove how you voted." })
+        : null,
+      contestFacts(h, [
+        { label: "Opens", value: formatTime(election.startTime) },
+        { label: "Closes", value: formatTime(election.cutoffTime) },
+        election.shortCode ? { label: "Short link", value: `/v/${election.shortCode}` } : null,
+      ]),
+      resultsAreSealed(election) ? h("p", { class: "notice", text: sealedUntilLabel(election, formatTime) }) : null,
+      h(
+        "p",
+        { class: "ballot-links" },
+        h("a", {
+          href: `/elections/${encodeURIComponent(election.id)}/info`,
+          "data-nav": "",
+          text: "Read candidate and measure information",
+        }),
+        " · ",
+        h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
+      ),
+      howCounted()
+    );
+  }
+
+  /** Every explanation of how the ballot is counted, behind one disclosure. */
+  function howCounted() {
+    const path = ballotPath(election, source);
+    const facts = contestFacts(h, [
+      isRollupVote(election)
+        ? { label: "Runs on", value: `ZkVotingRollup on L1, election ${election.rollupElectionId}` }
+        : null,
+      isRollupVote(election)
+        ? {
+            label: "Encryption",
+            value: "Encrypted in your browser to the guardians' joint key. Only the final sum is decrypted, after the cutoff, and L1 checks it.",
+          }
+        : election.tallyPubKey
+          ? { label: "Tally encryption", value: tallyEncryptionBlurb(election) }
+          : null,
+    ]);
+    return h(
+      "details",
+      { class: "how-counted" },
+      h("summary", { text: "How this is counted" }),
+      path.kind === "sample" ? null : h("p", {}, h("strong", { text: path.title }), ` ${path.body}`),
+      h("p", { text: election.tallyPubKey ? voteCopy("vote.envelopeHelpTally") : voteCopy("vote.envelopeHelp") }),
+      resultsAreSealed(election) ? h("p", { text: t("results.sealedBody") }) : null,
+      facts
     );
   }
 
@@ -497,6 +510,49 @@ export async function renderVote(main, ctx) {
     return signedIn();
   }
 
+  function currentBlockers() {
+    return voteBlockers({ source, signedIn: signedIn(), pinBound: pinBound(), publicRecord, electionId: election.id });
+  }
+
+  /** Where the voter is, and which path the ballot takes. Shown on every step. */
+  function flowGuide() {
+    const path = ballotPath(election, source);
+    const steps = voteSteps(state.step, { busy: state.busy, withPin: needsVotePin() || source !== "sample" });
+    return h(
+      "div",
+      { class: "vote-flow" },
+      h(
+        "ol",
+        { class: "vote-steps", "aria-label": "Voting steps" },
+        ...steps.map((s) =>
+          h("li", { class: `vote-step is-${s.state}`, ...(s.state === "current" ? { "aria-current": "step" } : {}), text: s.label })
+        )
+      ),
+      // A sample ballot says so up front; a live ballot's path is in "How this is counted".
+      path.kind === "sample"
+        ? h(
+            "div",
+            { class: `notice vote-path vote-path-${path.kind}`, role: "note" },
+            h("p", {}, h("strong", { text: path.title }), ` ${path.body}`)
+          )
+        : null
+    );
+  }
+
+  /** Clear the in-flight ballot state once a receipt exists. */
+  function acceptReceipt(receipt, announcement) {
+    recordVoteReceipt(election.id, receipt);
+    state.receipt = receipt;
+    state.step = "receipt";
+    state.info = "";
+    state.answersPreview = null;
+    state.pendingAnswers = null;
+    state.pinToken = null;
+    state.votePass = null;
+    state.pinDigits = "";
+    announce(announcement);
+  }
+
   function renderPinStep() {
     if (!state.pinKeypad && !state.busy) {
       state.busy = true;
@@ -571,7 +627,7 @@ export async function renderVote(main, ctx) {
   function paint() {
     const closed = election.state >= 3;
     const notOpen = election.state !== 2;
-    const children = [header()];
+    const children = [header(), flowGuide()];
     if (state.error) children.push(h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })));
     if (state.info) children.push(h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })));
 
@@ -582,7 +638,11 @@ export async function renderVote(main, ctx) {
     }
 
     if (state.receipt && (state.step === "receipt" || election.state === 2)) {
-      children.push(renderReceipt(state, { h, api, announce, election, paint, voteCopy }));
+      children.push(
+        state.receipt.rollup
+          ? renderRollupReceipt(state, { h, api, announce, election, paint, recordVoteReceipt })
+          : renderReceipt(state, { h, api, announce, election, paint, voteCopy, formatTime })
+      );
       children.push(
         h(
           "p",
@@ -594,21 +654,6 @@ export async function renderVote(main, ctx) {
       );
       fill(root, ...children);
       return;
-    }
-
-    if (!publicRecord || publicRecord.staleWrap) {
-      children.push(
-        h(
-          "div",
-          { class: "notice notice-warn" },
-          h("p", {
-            text: publicRecord?.staleWrap
-              ? "This device has a v1 passkey wrap that derived the vote identity from the account seed. Reset it on the register page and create a new passkey before voting."
-              : `This device does not have a ${brandName()} passkey yet. Register first, then return to the ballot.`,
-          }),
-          h("a", { class: "btn", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Go to registration" })
-        )
-      );
     }
 
     if (closed) {
@@ -635,26 +680,19 @@ export async function renderVote(main, ctx) {
       );
     }
 
-    if (me?.elections?.[election.id]?.status) {
-      children.push(h("p", { text: `Node status for you: ${me.elections[election.id].status}.` }));
-    }
-
-    if (source !== "sample" && !signedIn()) {
+    const blockers = currentBlockers();
+    if (blockers.length) {
       children.push(
         h(
-          "div",
-          { class: "notice notice-warn" },
-          h("p", { text: "Sign in and set a vote PIN before finalizing a live ballot. Sample ballots can still be marked on this device." }),
-          h("a", { class: "btn", href: "/signin", "data-nav": "", text: "Sign in" })
-        )
-      );
-    } else if (signedIn() && !pinBound()) {
-      children.push(
-        h(
-          "div",
-          { class: "notice notice-warn" },
-          h("p", { text: "Set a vote PIN on Identify yourself before submitting this ballot. You will tap it on a scrambled keypad at finalization." }),
-          h("a", { class: "btn", href: "/register", "data-nav": "", text: "Set vote PIN" })
+          "section",
+          { class: "notice notice-warn vote-blockers", "aria-labelledby": "vote-blockers-heading" },
+          h("h2", { id: "vote-blockers-heading", text: "Before you can cast this ballot" }),
+          h(
+            "ol",
+            {},
+            ...blockers.map((b) => h("li", {}, `${b.text} `, h("a", { href: b.href, "data-nav": "", text: b.cta })))
+          ),
+          h("p", { text: "You can mark the ballot now; it is sent only when you cast it." })
         )
       );
     }
@@ -696,14 +734,15 @@ export async function renderVote(main, ctx) {
             {
               class: "btn",
               type: "submit",
-              disabled: Boolean(
-                state.busy ||
-                  publicRecord?.staleWrap ||
-                  (signedIn() && !pinBound()) ||
-                  (source !== "sample" && !signedIn())
-              ),
+              disabled: Boolean(state.busy || blockers.length || (notOpen && source !== "sample")),
               "aria-busy": state.busy ? "true" : "false",
-              text: signedIn() ? "Continue to vote PIN" : state.busy ? "Waiting for passkey / relay…" : "Submit ballot with passkey",
+              text: state.busy
+                ? "Waiting for your passkey…"
+                : needsVotePin()
+                  ? "Next: vote PIN"
+                  : source === "sample"
+                    ? "Try it with your passkey"
+                    : "Cast with your passkey",
             }
           ),
           h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: "Cancel" })
@@ -721,17 +760,15 @@ export async function renderVote(main, ctx) {
     const answers = collectAnswers(form, questions);
     const blank = answers.every((a) => (a.ranking ? a.ranking.length === 0 : (a.optionIds || []).length === 0));
     if (blank && !window.confirm("Every question is blank. Submit an undervote?")) return;
-    if (election.state !== 2) {
-      if (!window.confirm("This election is not open. Try to relay anyway? The Node should reject the vote.")) return;
-    }
-
-    if (source !== "sample" && !signedIn()) {
-      state.error = "Sign in and enter your vote PIN before submitting a live ballot.";
+    if (election.state !== 2 && source !== "sample") {
+      state.error = "This election is not open for ballots.";
       paint();
       return;
     }
-    if (signedIn() && !pinBound()) {
-      state.error = "Set a vote PIN on Identify yourself before submitting this ballot.";
+
+    const blockers = currentBlockers();
+    if (blockers.length) {
+      state.error = blockers[0].text;
       paint();
       return;
     }
@@ -746,18 +783,67 @@ export async function renderVote(main, ctx) {
       return;
     }
 
-    if (!publicRecord || publicRecord.staleWrap) {
-      state.error = publicRecord?.staleWrap
-        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
-        : "Register a passkey on this device before voting.";
-      paint();
-      return;
-    }
-
     await submitBallot(answers);
   }
 
+  /**
+   * Civic vote on the rollup: encrypt in this browser under the guardians' joint key and
+   * hand the ciphertexts to the node with the vote pass, without cookies. The node relays
+   * to the L2 operator and keeps only a receipt; nobody decrypts a single ballot.
+   */
+  async function submitRollupBallot(answers) {
+    state.busy = true;
+    state.error = "";
+    state.info = "";
+    paint();
+    announce("Confirm your passkey. Your choice is encrypted in this browser.");
+    try {
+      const context = await loadBallotContext(api, election.id);
+      const choice = rollupChoiceIndex(answers, context);
+      const { nullifier } = await wallet.rollupNullifier(context.electionId);
+      const ballot = encryptRollupBallot({ context, choice, nullifier });
+      if (!state.votePass || state.votePass.electionId !== String(election.id)) {
+        const pass = await obtainVotePass(api, election.id, { pinToken: state.pinToken || undefined });
+        state.votePass = { electionId: String(election.id), ...pass };
+      }
+      let res;
+      try {
+        res = await api(`/api/elections/${encodeURIComponent(election.id)}/vote`, {
+          method: "POST",
+          body: { ...ballot, votePass: { token: state.votePass.token, signature: state.votePass.signature } },
+          // No session cookie on the ballot request: the pass is the only credential.
+          credentials: "omit",
+        });
+      } catch (err) {
+        if (["VOTE_PASS_SPENT", "VOTE_PASS_INVALID"].includes(err.data?.code)) state.votePass = null;
+        throw err;
+      }
+      const r = res?.receipt || {};
+      const receipt = {
+        rollup: true,
+        at: new Date().toISOString(),
+        l1ElectionId: String(context.electionId),
+        rollupAddress: context.rollup,
+        chainId: String(context.chainId),
+        nullifier,
+        commitment: r.commitment || null,
+        status: r.status || "pending",
+        accepted: true,
+        message: res?.message || "",
+        receiptsProveChoice: false,
+      };
+      acceptReceipt(receipt, "Ballot cast. The receipt does not include your choice.");
+    } catch (err) {
+      state.error = err.message || "The ballot was not accepted.";
+      announce(state.error);
+    } finally {
+      state.busy = false;
+      paint();
+    }
+  }
+
   async function submitBallot(answers) {
+    if (isRollupVote(election)) return submitRollupBallot(answers);
     state.busy = true;
     state.error = "";
     state.info = "";
@@ -778,7 +864,7 @@ export async function renderVote(main, ctx) {
     const nOptions = expectedCountLength(questions);
 
     try {
-      const onChainId = chainElectionId ? chainElectionId(election) : String(election.onChainElectionId ?? election.id);
+      const localId = localElectionIdOf ? localElectionIdOf(election) : String(election.localElectionId ?? election.id);
       // Sealed ranked-choice: encrypt the ranking first (with the first-choice
       // index and tag randomness inside), then bind its hash into the proven
       // AG tag, so the ranking cannot be swapped after the ballot is cast.
@@ -795,7 +881,7 @@ export async function renderVote(main, ctx) {
       }
       const auth = await wallet.authorizeBallot({
         electionId: election.id,
-        chainElectionId: onChainId,
+        localElectionId: localId,
         tallyPubKey,
         choiceIndex,
         nOptions,
@@ -806,7 +892,7 @@ export async function renderVote(main, ctx) {
         disqRoot: election.disqualificationRoot,
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,
-        electionId: onChainId,
+        electionId: localId,
       });
       // Blind-signed, one-per-voter pass. The issuance request does not send
       // the identity commitment. The ballot request below does not send the
@@ -882,17 +968,8 @@ export async function renderVote(main, ctx) {
         message,
         receiptsProveChoice: false,
       };
-      recordVoteReceipt(election.id, receipt);
       if (receipt.proofText) rememberProof(receipt.proofText);
-      state.receipt = receipt;
-      state.step = "receipt";
-      state.info = "";
-      state.answersPreview = null;
-      state.pendingAnswers = null;
-      state.pinToken = null;
-      state.votePass = null;
-      state.pinDigits = "";
-      announce("Ballot submitted. Receipt does not include your choices.");
+      acceptReceipt(receipt, "Ballot submitted. Receipt does not include your choices.");
     } catch (err) {
       state.error = err.message || "The relay rejected this ballot.";
       announce(state.error);
@@ -905,7 +982,81 @@ export async function renderVote(main, ctx) {
   paint();
 }
 
-function renderReceipt(state, { h, api, announce, election, paint, voteCopy }) {
+/** Receipt for a civic vote on the rollup. It proves the ballot is in the sum, not how it voted. */
+function renderRollupReceipt(state, { h, api, announce, election, paint, recordVoteReceipt }) {
+  const receipt = state.receipt || {};
+  const proof = [
+    "-----BEGIN ZK-VOTING ROLLUP BALLOT RECEIPT-----",
+    `electionId: ${election.id}`,
+    `l1ElectionId: ${receipt.l1ElectionId}`,
+    `rollup: ${receipt.rollupAddress} (chain ${receipt.chainId})`,
+    `nullifier: ${receipt.nullifier}`,
+    receipt.commitment ? `ballotCommitment: ${receipt.commitment}` : null,
+    "-----END ZK-VOTING ROLLUP BALLOT RECEIPT-----",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  async function refresh() {
+    if (state.receiptBusy) return;
+    state.receiptBusy = true;
+    paint();
+    try {
+      const r = await fetchRollupReceipt(api, election.id, receipt.nullifier);
+      receipt.status = r?.status || receipt.status;
+      receipt.batchNumber = r?.batchNumber ?? receipt.batchNumber;
+      receipt.l1Tx = r?.l1Tx ?? receipt.l1Tx;
+      receipt.reason = r?.reason ?? receipt.reason;
+      recordVoteReceipt(election.id, receipt);
+      announce(describeRollupReceipt(receipt));
+    } catch (err) {
+      state.error = err.message || "Could not check the ballot status.";
+      announce(state.error);
+    } finally {
+      state.receiptBusy = false;
+      paint();
+    }
+  }
+
+  const row = (label, value, hex) =>
+    h("li", {}, h("span", { class: "lbl", text: label }), h("span", { class: hex ? "hex" : "", text: value || "—" }));
+
+  return h(
+    "section",
+    { class: "receipt", "aria-labelledby": "receipt-heading" },
+    h("h2", { id: "receipt-heading", text: "Ballot receipt" }),
+    h("p", {
+      text: "Your ballot was encrypted in this browser and sent to the rollup. Only the final sum of all ballots is ever decrypted, by the guardians together. This receipt shows that your ballot is in that sum. It cannot show how you voted.",
+    }),
+    h("p", { class: "notice", role: "status", text: describeRollupReceipt(receipt) }),
+    h(
+      "ul",
+      { class: "meta-list" },
+      row("Cast", receipt.at),
+      row("L1 election", receipt.l1ElectionId),
+      row("Nullifier", receipt.nullifier, true),
+      row("Ballot commitment", receipt.commitment, true),
+      receipt.batchNumber != null ? row("Batch", String(receipt.batchNumber)) : null,
+      receipt.l1Tx ? row("L1 transaction", receipt.l1Tx, true) : null
+    ),
+    h("label", { class: "field", for: "receipt-proof-copy" }, "Copy-paste receipt"),
+    h("textarea", { id: "receipt-proof-copy", class: "proof-paste", readOnly: true, rows: 7, value: proof }),
+    h(
+      "div",
+      { class: "cluster" },
+      h("button", { class: "btn", type: "button", text: "Copy receipt", onClick: () => copyText(proof, announce) }),
+      h("button", {
+        class: "btn btn-secondary",
+        type: "button",
+        disabled: Boolean(state.receiptBusy),
+        text: state.receiptBusy ? "Checking…" : "Check status",
+        onClick: refresh,
+      })
+    )
+  );
+}
+
+function renderReceipt(state, { h, api, announce, election, paint, voteCopy, formatTime }) {
   const receipt = state.receipt || {};
   const proof =
     receipt.proofText ||

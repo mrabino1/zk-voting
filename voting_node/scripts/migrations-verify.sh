@@ -154,12 +154,10 @@ cmd_smoke() {
       -e PORT=3000 \
       -e DATA_DIR=/data \
       -e CHAIN_ID=27427 \
-      -e CHAIN_RPC= \
       -e L1_RPC= \
       -e L1_RPC_URL= \
-      -e L1_PUBLISHER_PRIVATE_KEY= \
-      -e L1_PRIVATE_KEY= \
-      -e RELAYER_PRIVATE_KEY= \
+      -e ROLLUP_PRIVATE_KEY= \
+      -e ROLLUP_DEPLOYMENT_FILE= \
       -e SUPER_ADMIN_EMAIL= \
       -e AWS_ACCESS_KEY_ID= \
       -e AWS_SECRET_ACCESS_KEY= \
@@ -170,7 +168,6 @@ cmd_smoke() {
       -e ALLOW_DEV_LOGIN= \
       -e CREDENTIAL_PROVIDER_SECRET= \
       -e RECEIPT_PDF_SECRET= \
-      -e EXPLORER_INGEST_SECRET= \
       "$IMAGE"
   }
 

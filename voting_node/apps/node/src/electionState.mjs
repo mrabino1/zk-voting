@@ -13,42 +13,29 @@ import {
   voteResultsSealed,
 } from './electionType.mjs';
 
-/** Writer-only clock for BallotInbox batches. Reads do not flush. */
-export function startVoteFlushTimer(deps, { intervalMs = 60_000, setIntervalFn = setInterval } = {}) {
-  if (typeof deps.chain?.flushVoteQueue !== 'function') return { stop() {} };
-  const timer = setIntervalFn(async () => {
-    const writer = deps.writer;
-    if (writer && writer.enabled !== false && !writer.acceptingWrites()) return;
-    if (deps.store?.writerActive === false) return;
-    const now = deps.config.nowFn();
-    try {
-      await deps.chain.flushVoteQueue(now);
-    } catch (err) {
-      if (!deps.config?.quiet) console.warn(`chain batch flush failed: ${err.message || err}`);
-    }
-  }, intervalMs);
-  if (typeof timer.unref === 'function') timer.unref();
-  return {
-    stop() {
-      clearInterval(timer);
-    },
-  };
-}
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
+
+/**
+ * The roll is fixed: frozen on the node, or, for a civic vote published to the rollup,
+ * held on L1 (which takes new voters only until startTime). The node freeze is not used then.
+ */
+export function rollFixed(election) {
+  return Boolean(election?.rollFrozen) || Boolean(election?.rollup?.electionId);
+}
 
 export function electionState(election, now = Math.floor(Date.now() / 1000)) {
   if (election.tally) return 4;
   if (now >= election.cutoffTime) return 3;
-  if (now >= election.startTime && election.rollFrozen) return 2;
-  if (election.rollFrozen) return 1;
+  if (now >= election.startTime && rollFixed(election)) return 2;
+  if (rollFixed(election)) return 1;
   return 0;
 }
 
 /** Demo still allocates a uint256 circuit id; onchain means factory mapping exists. */
+/** `rollup` once a civic vote is on L1 (ZkVotingRollup); `node` for everything else. */
 export function electionChainMode(election) {
-  if (election?.createTxHash || election?.onChainElectionAddress) return 'onchain';
-  return 'demo';
+  return election?.rollup?.electionId ? 'rollup' : 'node';
 }
 
 /**
@@ -133,12 +120,9 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
       : null,
     lateUpdateAllowed: election.lateUpdateAllowed,
     sealedRankedChoice: election.sealedRankedChoice === true,
-    onChainElectionId: election.onChainElectionId != null ? String(election.onChainElectionId) : null,
-    onChainElectionAddress: election.onChainElectionAddress || null,
-    factoryAddress: election.factoryAddress || null,
-    createTxHash: election.createTxHash || null,
-    chainId: election.chainId ?? null,
+    localElectionId: election.localElectionId != null ? String(election.localElectionId) : null,
     chainMode: electionChainMode(election),
+    rollupElectionId: election.rollup?.electionId != null ? String(election.rollup.electionId) : null,
     rollFrozen: election.rollFrozen,
     frozenAt: election.frozenAt,
     frozenEligibleRoot: election.frozenEligibleRoot || null,
@@ -176,7 +160,6 @@ export async function publishDue(deps) {
   const interval = settings.intervalSeconds;
   const standby = deps.writer && deps.writer.enabled !== false && !deps.writer.acceptingWrites();
   if (!standby && deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
-  // Chain batches run on the writer timer (startVoteFlushTimer), not on a read.
   const view = deps.explorer?.publicDisclosure
     ? deps.explorer.publicDisclosure(now, interval)
     : publicDisclosureView(now, interval, {

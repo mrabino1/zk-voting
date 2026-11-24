@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 
-import { ALLOW_REVOTE_CHAIN_CONFIGURED, getConfig } from '../src/config.mjs';
+import { getConfig } from '../src/config.mjs';
 import {
   DEFAULT_LOCALE,
   HTML_LANG,
@@ -63,55 +63,46 @@ describe('website i18n', () => {
     assert.equal(getLocale(), 'es');
     assert.equal(localeTag(), 'es');
     assert.equal(t('chrome.navElections'), 'Elecciones');
-    assert.equal(t('home.markBallot'), 'Marcar boleta');
 
     resetLocaleForTests('zh');
     assert.equal(getLocale(), 'zh');
     assert.equal(localeTag(), 'zh-Hans');
     assert.equal(t('chrome.navElections'), '选举');
-    assert.equal(t('home.markBallot'), '填写选票');
 
     resetLocaleForTests('fil');
     assert.equal(getLocale(), 'fil');
     assert.equal(localeTag(), 'fil');
     assert.equal(t('chrome.navElections'), 'Mga halalan');
-    assert.equal(t('home.markBallot'), 'Markahan ang balota');
 
     resetLocaleForTests('vi');
     assert.equal(getLocale(), 'vi');
     assert.equal(localeTag(), 'vi');
     assert.equal(t('chrome.navElections'), 'Bầu cử');
-    assert.equal(t('home.markBallot'), 'Đánh phiếu');
 
     resetLocaleForTests('ar');
     assert.equal(getLocale(), 'ar');
     assert.equal(localeTag(), 'ar');
     assert.equal(t('chrome.navElections'), 'الانتخابات');
-    assert.equal(t('home.markBallot'), 'تعبئة ورقة الاقتراع');
 
     resetLocaleForTests('fr');
     assert.equal(getLocale(), 'fr');
     assert.equal(localeTag(), 'fr');
     assert.equal(t('chrome.navElections'), 'Élections');
-    assert.equal(t('home.markBallot'), 'Remplir le bulletin');
 
     resetLocaleForTests('ko');
     assert.equal(getLocale(), 'ko');
     assert.equal(localeTag(), 'ko');
     assert.equal(t('chrome.navElections'), '선거');
-    assert.equal(t('home.markBallot'), '투표용지 작성');
 
     resetLocaleForTests('pt');
     assert.equal(getLocale(), 'pt');
     assert.equal(localeTag(), 'pt-BR');
     assert.equal(t('chrome.navElections'), 'Eleições');
-    assert.equal(t('home.markBallot'), 'Marcar cédula');
 
     resetLocaleForTests('hi');
     assert.equal(getLocale(), 'hi');
     assert.equal(localeTag(), 'hi');
     assert.equal(t('chrome.navElections'), 'चुनाव');
-    assert.equal(t('home.markBallot'), 'मतपत्र भरें');
 
     assert.equal(t('this.key.does.not.exist'), 'this.key.does.not.exist');
   });
@@ -193,10 +184,6 @@ describe('website i18n', () => {
     assert.equal(getConfig({}).allowRevote, false);
     assert.equal(receiptHelpKey(getConfig({}).allowRevote), 'vote.receiptHelp');
     assert.equal(receiptHelpKey(getConfig({ allowRevote: true }).allowRevote), 'vote.receiptHelpRevote');
-    assert.throws(
-      () => getConfig({ allowRevote: true, chainRpc: 'http://127.0.0.1:8545' }),
-      new RegExp(ALLOW_REVOTE_CHAIN_CONFIGURED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
-    );
     const dicts = catalogs();
     for (const code of SUPPORTED_LOCALES) {
       resetLocaleForTests(code);

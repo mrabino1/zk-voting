@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# zk-voting gas economics: live gas price and ETH/USD, contract sizes vs the
-# pre-Glamsterdam caps and the Glamsterdam (EIP-7954) caps, one-time deploy
-# gas, and (with --measure) per-call gas for a poll and a vote.
+# zk-voting gas economics: live gas price and ETH/USD, ZkVotingRollup's size vs the
+# pre-Glamsterdam caps and the Glamsterdam (EIP-7954) caps, one-time deploy gas,
+# and (with --measure) per-call gas and the L1 bill of one civic vote.
 # NOT FOR PROFIT — civic public good, not a commercial product.
 #
 # The L1 node is L1_RPC (env, .env, or --l1-rpc). The price source is
@@ -18,8 +18,6 @@ Usage: $(basename "$0") [options]
 Gas price (one is required unless --offline):
   --l1-rpc URL         L1 JSON-RPC for eth_gasPrice          (L1_RPC, or ETH_RPC_URL)
   --gas-gwei N         fixed L1 gas price, skips the RPC     (GAS_GWEI)
-  --l2-rpc URL         optional EVM RPC for the election stack (GAS_L2_RPC)
-  --l2-gas-gwei N      fixed L2 gas price                    (GAS_L2_GWEI)
   --offline            no network calls. ETH/USD falls back to 10000
 
 ETH/USD:
@@ -35,18 +33,21 @@ Gas measurements:
                        (alias: --gas-report)
   --match-contract RE  test contracts to run with --measure  (GAS_MATCH_CONTRACT)
   --ops-filter RE      also list every measured function matching RE
-  --voters N           unique voters in the highlighted run (VOTERS, default 1000)
-  --ballots N          submissions, including re-votes       (BALLOTS, default = voters)
+  --voters N           voters on the roll                    (VOTERS, default 1000)
+  --ballots N          ballots cast                          (BALLOTS, default = voters)
   --hours N            open hours of the voting window       (HOURS, default 12)
-  --batches N          override L1 batch count for that run  (BATCHES; default is hours+2:
-                       one hourly batch per open hour, the final batch, and one
-                       supplementary batch)
-  --groth16-gas N      extra gas for a real Groth16 proof, once per L1
-                       settlement (GROTH16_EXTRA_GAS, default 250000; 0 to hide).
-                       Not once per ballot. Tests use a mock verifier.
+  --batches N          fix the batch count                   (BATCHES; default: show the
+                       range from full 256-ballot batches to one per max wait)
+  --max-wait N         operator's L2_BATCH_MAX_WAIT_SECONDS  (MAX_WAIT, default 600)
+  --guardians N        guardians                             (GUARDIANS, default 3)
+  --threshold K        guardians needed to decrypt           (THRESHOLD, default a majority)
+  --options N          options on the ballot                 (OPTIONS, default 2)
+  --groth16-gas N      gas for a real batch proof, once per batch
+                       (GROTH16_EXTRA_GAS, default 250000; 0 to hide).
+                       Tests use a mock verifier.
   --record FILE        deployment record from scripts/deploy.sh for measured
                        deploy gas (DEPLOYMENTS_FILE; default
-                       deployments/<chainId>.json for the L2, then L1, chain)
+                       deployments/<chainId>.json for the L1 chain)
   --out-dir DIR        forge artifacts                       (OUT_DIR, default smart-contracts/out)
   --build              run forge build first
   -h, --help           this help
@@ -60,9 +61,7 @@ USAGE
 load_repo_env
 
 L1_URL="${L1_RPC:-${ETH_RPC_URL:-}}"
-L2_URL="${GAS_L2_RPC:-}"
 GAS_GWEI="${GAS_GWEI:-}"
-L2_GWEI="${GAS_L2_GWEI:-}"
 ETH_USD="${ETH_USD:-}"
 OFFLINE=0
 NO_PRICE=0
@@ -75,6 +74,10 @@ BALLOTS="${BALLOTS:-}"
 HOURS="${HOURS:-12}"
 BATCHES="${BATCHES:-}"
 GROTH16="${GROTH16_EXTRA_GAS:-250000}"
+GUARDIANS="${GUARDIANS:-3}"
+THRESHOLD="${THRESHOLD:-}"
+OPTIONS="${OPTIONS:-2}"
+MAX_WAIT="${MAX_WAIT:-600}"
 RECORD="${DEPLOYMENTS_FILE:-}"
 OUT_DIR="${OUT_DIR:-$SC_DIR/out}"
 
@@ -82,8 +85,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --l1-rpc | --rpc-url) L1_URL="${2:?$1 needs a value}"; shift 2 ;;
     --gas-gwei) GAS_GWEI="${2:?$1 needs a value}"; shift 2 ;;
-    --l2-rpc) L2_URL="${2:?$1 needs a value}"; shift 2 ;;
-    --l2-gas-gwei) L2_GWEI="${2:?$1 needs a value}"; shift 2 ;;
     --offline) OFFLINE=1; shift ;;
     --eth-usd) ETH_USD="${2:?$1 needs a value}"; shift 2 ;;
     --no-price) NO_PRICE=1; shift ;;
@@ -94,6 +95,10 @@ while [[ $# -gt 0 ]]; do
     --ballots) BALLOTS="${2:?$1 needs a value}"; shift 2 ;;
     --hours) HOURS="${2:?$1 needs a value}"; shift 2 ;;
     --batches) BATCHES="${2:?$1 needs a value}"; shift 2 ;;
+    --guardians) GUARDIANS="${2:?$1 needs a value}"; shift 2 ;;
+    --threshold) THRESHOLD="${2:?$1 needs a value}"; shift 2 ;;
+    --options) OPTIONS="${2:?$1 needs a value}"; shift 2 ;;
+    --max-wait) MAX_WAIT="${2:?$1 needs a value}"; shift 2 ;;
     --groth16-gas) GROTH16="${2:?$1 needs a value}"; shift 2 ;;
     --record) RECORD="${2:?$1 needs a value}"; shift 2 ;;
     --out-dir) OUT_DIR="${2:?$1 needs a value}"; shift 2 ;;
@@ -103,10 +108,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for n in VOTERS HOURS GROTH16; do
+for n in VOTERS HOURS GROTH16 GUARDIANS OPTIONS MAX_WAIT; do
   [[ "${!n}" =~ ^[0-9]+$ ]] || { printf 'error: %s must be a whole number (got %s)\n' "$n" "${!n}" >&2; exit 2; }
 done
-for n in BALLOTS BATCHES; do
+for n in BALLOTS BATCHES THRESHOLD; do
   [[ -z "${!n}" || "${!n}" =~ ^[0-9]+$ ]] || { printf 'error: %s must be a whole number (got %s)\n' "$n" "${!n}" >&2; exit 2; }
 done
 
@@ -119,7 +124,6 @@ fi
 if [[ "$OFFLINE" -eq 1 ]]; then
   NO_PRICE=1
   L1_URL=""
-  L2_URL=""
 fi
 
 # wei (hex) -> gwei, 6 decimals
@@ -161,19 +165,6 @@ else
   L1_DESC="none (--offline)"
 fi
 
-L2_DESC=""
-L2_GAS_SRC=""
-L2_CHAIN=""
-if [[ -n "$L2_GWEI" ]]; then
-  L2_GAS_SRC="GAS_L2_GWEI override"
-elif [[ -n "$L2_URL" ]]; then
-  L2_DESC="$(redact_url "$L2_URL")"
-  if L2_CHAIN="$(chain_id_of "$L2_URL")"; then
-    L2_DESC="$L2_DESC (chain $L2_CHAIN)"
-    hex="$(rpc_call "$L2_URL" eth_gasPrice)" && L2_GWEI="$(hex_wei_to_gwei "$hex")" && L2_GAS_SRC="eth_gasPrice"
-  fi
-  [[ -n "$L2_GWEI" ]] || warn "L2 node $L2_DESC did not answer eth_gasPrice; L2 rows use the L1 price"
-fi
 
 # --- ETH/USD -------------------------------------------------------------------
 json_path() { # json_path a.b.c < json
@@ -225,7 +216,7 @@ fi
 # --- deployment record ---------------------------------------------------------
 RECORD_DESC=""
 if [[ -z "$RECORD" ]]; then
-  for c in "$L2_CHAIN" "$L1_CHAIN"; do
+  for c in "$L1_CHAIN"; do
     if [[ -n "$c" && -f "$REPO_ROOT/deployments/$c.json" ]]; then
       RECORD="$REPO_ROOT/deployments/$c.json"
       break
@@ -255,9 +246,9 @@ fi
 
 GE_SC_DIR="$SC_DIR" GE_OUT_DIR="$OUT_DIR" \
   GE_L1_DESC="$L1_DESC" GE_L1_GWEI="$GAS_GWEI" GE_L1_GAS_SRC="$L1_GAS_SRC" GE_L1_BASEFEE_GWEI="$L1_BASE" \
-  GE_L2_DESC="$L2_DESC" GE_L2_GWEI="$L2_GWEI" GE_L2_GAS_SRC="$L2_GAS_SRC" \
   GE_ETH_USD="$ETH_USD" GE_PRICE_SRC="$PRICE_SRC" \
   GE_RECORD="$RECORD" GE_RECORD_DESC="$RECORD_DESC" GE_GAS_REPORT="$GAS_REPORT" \
   GE_VOTERS="$VOTERS" GE_BALLOTS="$BALLOTS" GE_HOURS="$HOURS" GE_BATCHES="$BATCHES" \
   GE_GROTH16_EXTRA_GAS="$GROTH16" GE_OPS_FILTER="$OPS_FILTER" \
+  GE_GUARDIANS="$GUARDIANS" GE_THRESHOLD="$THRESHOLD" GE_OPTIONS="$OPTIONS" GE_MAX_WAIT="$MAX_WAIT" \
   python3 -B "$(dirname "${BASH_SOURCE[0]}")/lib/gas_economics.py"

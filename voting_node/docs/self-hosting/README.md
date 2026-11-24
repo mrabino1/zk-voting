@@ -6,7 +6,9 @@ zk-voting is built to be forked and run by anyone who needs to read the will of 
 
 The same pages are served by every running Node at `/docs`, so operators can read them without leaving the app.
 
-> **Branding is yours.** "zk-voting" is the default name. A full branding configuration (name, logo, colors, emails, PDFs) is planned in a follow-up change; until then, the public site text can be edited by an officer at `/office/site`, and environment variables always win over that editor.
+> **Your fork, your name.** "ZK-Voting" is only the default. Set `BRAND_NAME`, the `CLIENT_*`
+> variables and the theme from Site admin; a fork changes configuration, not code, so it can keep
+> merging upstream releases.
 
 ## Install
 
@@ -29,6 +31,7 @@ The same pages are served by every running Node at `/docs`, so operators can rea
 | [Backups](./backups.md) | Before every upgrade, and on a schedule. |
 | [Rollback](./rollback.md) | An upgrade went wrong and you need the previous build back. |
 | [Rolling updates](./rolling-updates.md) | You want zero-downtime deploys (old and new containers overlap). |
+| [Forking and staying current](./forking.md) | You run your own fork and want to keep taking upstream releases without conflicts. |
 
 ## Trusted setup
 
@@ -46,16 +49,22 @@ The same pages are served by every running Node at `/docs`, so operators can rea
 
 | Service | Image | Role |
 | --- | --- | --- |
-| `node` | built from `Dockerfile` (`node:24-bookworm-slim`) | Voter, officer, and public web app plus the JSON API. Stores its data in one JSON file on the `node-data` volume. |
-| `l2` | built from `l2/Dockerfile` | Civic sequencer (JSON-RPC on 8546). |
-| `prover` | same as `l2` | Batch prover. |
-| `archive` | same as `l2` | Hourly archive of sealed blocks to S3 or R2. Safe no-op when no bucket is set. |
+| `node` | built from `Dockerfile` (`node:24-bookworm-slim`) | Voter, officer and public web app plus the JSON API. Runs polls itself; publishes civic votes to L1 and relays their ballots to `l2`. |
+| `l2` | built from `l2/Dockerfile` | The rollup operator: takes ballots from the node, commits and executes batches on ZkVotingRollup. |
+| `db` | `postgres:16-alpine` | The node's state. |
+| `l1` (profile `local-l1`) | Foundry (Anvil) | A local Ethereum chain (31337) for a laptop or a test install. |
+| `l1-deploy` (profile `local-l1`) | Foundry | One-shot: deploys ZkVotingRollup on the local chain and writes the deployment record the node and `l2` read. |
 | `tailscale` (optional) | `tailscale/tailscale:stable` | Joins the Node to your tailnet and terminates HTTPS. See [Tailscale sidecar](./tailscale.md). |
 
-There is **no Postgres and no Redis** to run. The Node keeps its state in `$DATA_DIR/zk-voting.json` (the file name is kept for compatibility with existing installs).
+The default `.env` (`COMPOSE_PROFILES=local-l1`) runs the whole stack on one machine with no
+paid service and no public chain: a fork works out of the box. To settle on a public chain, point
+`L1_RPC` and `ROLLUP_ADDRESS` at the one shared ZkVotingRollup deployment instead (step 6 of
+`./setup.sh`). Until the batch validity circuit is built, settlement works only on the local chain
+(see "Known limits" in the root README).
 
 ## Deeper reading
 
-- `docs/OPERATOR.md` — full operator runbook (chain deploys, guardians, L1 certification).
+- `docs/OPERATOR.md` — full operator runbook (the rollup, guardians, keys).
+- `smart-contracts/docs/ROLLUP.md` — the rollup design: one L1 contract, sum-only results.
 - `docs/ROLLING_UPDATES.md` — writer lease, fencing, and failure modes during overlap.
 - `docs/ARCHITECTURE.md` — package map and interfaces.

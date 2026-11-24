@@ -57,7 +57,7 @@ Pick `docker-compose.tailscale.yml` as the Compose file and set `TS_AUTHKEY` in 
 
 ## Alternative: share the network namespace
 
-Instead of the serve proxy, the Node can run inside the sidecar's network namespace with `network_mode: service:tailscale` on `node`. Then `node` cannot join other Compose networks, and `CHAIN_RPC` must point at an address reachable from the sidecar. The bundled file uses the proxy because it keeps the default topology unchanged.
+Instead of the serve proxy, the Node can run inside the sidecar's network namespace with `network_mode: service:tailscale` on `node`. Then `node` cannot join other Compose networks, and `L1_RPC` and `L2_URL` must point at addresses reachable from the sidecar. The bundled file uses the proxy because it keeps the default topology unchanged.
 
 ## Troubleshooting
 

@@ -243,17 +243,6 @@ cmd_health() {
   fi
 }
 
-cmd_archive() {
-  need node
-  info "L2 hourly archive (attic). Sequencer hot path stays local."
-  node "$ROOT/l2/archive/cli.mjs" archive
-}
-
-cmd_archive_restore() {
-  need node
-  node "$ROOT/l2/archive/cli.mjs" restore "$@"
-}
-
 cmd_deploy_dev() {
   info "deploying DEVELOPMENT from $DEV_BRANCH"
   deploy "$DEV_BRANCH" "development"
@@ -298,7 +287,7 @@ Data / chain (JSON store, no SQL database)
   5, data, --data-status
                   zk-voting.json counts
   6, connectivity
-                  Node / L2 / CHAIN_RPC / L1_RPC reachability
+                  Node / L2 operator / L1 reachability
   7, users, --list-users
                   local Node handles + roles (no emails)
   dev-flags       ALLOW_DEV_LOGIN and mock flags
@@ -313,8 +302,6 @@ Host / operator
   restart         reload pm2 / systemd / compose
   logs            last ${LOG_LINES} log lines
   health          GET ${HEALTH_URL}
-  archive         hourly L2 attic (on by default; no delete without a bucket or file:// sink)
-  archive-restore restore one sealed hour from S3/R2 (read-only)
 
 Environment overrides
   ZK_VOTING_DEV_BRANCH   ZK_VOTING_PROD_BRANCH
@@ -352,7 +339,6 @@ menu() {
     echo "    r) restart services"
     echo "    l) logs"
     echo "    k) health"
-    echo "    a) L2 archive offload (hourly attic)"
     echo "    h) help"
     echo "    0) exit"
     printf 'select> '
@@ -375,7 +361,6 @@ menu() {
       r) restart_services ;;
       l) show_logs ;;
       k) cmd_health || true ;;
-      a) cmd_archive || true ;;
       h|H|\?) cmd_help ;;
       0) exit 0 ;;
       *) warn "unknown selection: $choice" ;;
@@ -406,8 +391,6 @@ main() {
     restart) restart_services ;;
     logs) show_logs ;;
     health) cmd_health ;;
-    archive) cmd_archive ;;
-    archive-restore) cmd_archive_restore "$@" ;;
     *)
       err "unknown command: $cmd"
       cmd_help

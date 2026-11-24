@@ -1,5 +1,9 @@
 # Proposal: L2 registry, election keys, and per-L2 settlement
 
+> **Superseded (2026-11-23).** The rollup redesign replaced `RollupSettlement`, `L1TallyMirror`,
+> the L2 registry and the L2 identity with one contract, `ZkVotingRollup`
+> ([`smart-contracts/docs/ROLLUP.md`](../../smart-contracts/docs/ROLLUP.md)). Kept for history.
+
 Status: **proposal for Matthew to apply by hand in `smart-contracts/`.** No file
 in `smart-contracts/` was changed. The off-chain side (sequencer, prover, Node)
 already computes the same hashes: `voting_node/l2/identity.mjs`, cross-checked with

@@ -1,7 +1,7 @@
 # NOT FOR PROFIT — civic public good. Not a commercial product.
 # Keep this in sync with .gitignore. Docker build context for:
 #   apps/node  (voter / admin / back-office / explorer)
-#   l2/        (sequencer + prover)
+#   l2/        (rollup operator)
 #   smart-contracts/ (Foundry deploy images)
 # Secrets, voter data, proving keys, and host junk must never enter an image layer.
 

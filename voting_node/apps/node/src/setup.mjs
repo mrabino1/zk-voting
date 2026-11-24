@@ -13,7 +13,7 @@ export const DEFAULT_CHAIN_ID = 27427;
 export const MAX_CHAIN_ID = 2 ** 53 - 1;
 
 export const CHAIN_ID_PRESETS = Object.freeze([
-  Object.freeze({ chainId: 27427, label: 'Civic L2 (default)' }),
+  Object.freeze({ chainId: 27427, label: 'Node default' }),
   Object.freeze({ chainId: 1, label: 'Ethereum mainnet' }),
   Object.freeze({ chainId: 11155111, label: 'Sepolia testnet' }),
   Object.freeze({ chainId: 31337, label: 'Local (Anvil / Hardhat)' }),
