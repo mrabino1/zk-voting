@@ -7,18 +7,20 @@
 //   low    balance covers at least one batch but fewer than the minimum: warn
 //   empty  balance cannot pay for one batch: the prover holds batches (fail closed)
 
+import { l1RpcHeaders, redactL1RpcAuth } from '../l1RpcAuth.js';
+
 export const DEFAULT_GAS_PER_BATCH = 250_000n;
 export const DEFAULT_MIN_BATCHES = 20n;
 
-async function rpc(url, method, params, fetchImpl) {
+async function rpc(url, method, params, fetchImpl, env) {
   const res = await fetchImpl(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: l1RpcHeaders(env),
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
     signal: AbortSignal.timeout(8000),
   });
   const json = await res.json();
-  if (json.error) throw new Error(json.error.message || 'rpc error');
+  if (json.error) throw new Error(redactL1RpcAuth(json.error.message || 'rpc error', env));
   return json.result;
 }
 
@@ -60,6 +62,7 @@ export async function checkSubmitterFunding({
   l1Rpc,
   address,
   fetchImpl = fetch,
+  env = process.env,
   gasPerBatch = BigInt(process.env.L1_SUBMITTER_GAS_PER_BATCH || DEFAULT_GAS_PER_BATCH),
   minBatches = BigInt(process.env.L1_SUBMITTER_MIN_BATCHES || DEFAULT_MIN_BATCHES),
 } = {}) {
@@ -69,11 +72,16 @@ export async function checkSubmitterFunding({
   }
   try {
     const [bal, gp] = await Promise.all([
-      rpc(l1Rpc, 'eth_getBalance', [address, 'latest'], fetchImpl),
-      rpc(l1Rpc, 'eth_gasPrice', [], fetchImpl),
+      rpc(l1Rpc, 'eth_getBalance', [address, 'latest'], fetchImpl, env),
+      rpc(l1Rpc, 'eth_gasPrice', [], fetchImpl, env),
     ]);
     return { address, ...assessFunding({ balanceWei: BigInt(bal), gasPriceWei: BigInt(gp), gasPerBatch, minBatches }) };
   } catch (err) {
-    return { level: 'unreachable', ok: false, address, message: `L1 RPC error: ${err.message || err}` };
+    return {
+      level: 'unreachable',
+      ok: false,
+      address,
+      message: redactL1RpcAuth(`L1 RPC error: ${err.message || err}`, env),
+    };
   }
 }

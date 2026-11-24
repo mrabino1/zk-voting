@@ -133,6 +133,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for vote relay |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for factory create and on-chain submit |
 | `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postCertifiedResult`. Unset → tally still works (no-op certify) |
+| `L1_RPC_AUTH_TOKEN` | _empty_ | Optional bearer token for an L1 RPC that requires auth. Empty sends no Authorization header. |
 | `L1_TALLY_MIRROR_ADDRESS` | _empty_ | Required with `L1_RPC` and `L1_PUBLISHER_PRIVATE_KEY` to post |
 | `L1_PUBLISHER_PRIVATE_KEY` | _empty_ | Mirror admin or `setPublisher` key. Not the L2 prover `PRIVATE_KEY`. Never a mainnet key in CI |
 | `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |

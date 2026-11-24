@@ -9,13 +9,16 @@
 //   node apps/node/scripts/certify-l1.mjs --election-id 1 --from-store
 //
 // Env: L1_RPC, L1_TALLY_MIRROR_ADDRESS, L1_PUBLISHER_PRIVATE_KEY
-// Optional: L1_SETTLEMENT_ADDRESS, L1_CHAIN_ID, DATA_DIR, TOTAL_BALLOTS, L2_STATE_ROOT
+// Optional: L1_RPC_AUTH_TOKEN (bearer token for an L1 RPC that requires auth;
+// empty sends no Authorization header), L1_SETTLEMENT_ADDRESS, L1_CHAIN_ID,
+// DATA_DIR, TOTAL_BALLOTS, L2_STATE_ROOT
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
+import { redactL1RpcAuth } from '../../../l2/l1RpcAuth.js';
 import { electionMatchesRef, l1IdentityOf } from '../src/electionIds.mjs';
 
 const require = createRequire(import.meta.url);
@@ -73,7 +76,8 @@ to L1TallyMirror.postResult when L1 env is set. Unset env → no-op (exit 0).
   node apps/node/scripts/certify-l1.mjs --election-id ID --from-store
 
 Env: L1_RPC  L1_TALLY_MIRROR_ADDRESS  L1_PUBLISHER_PRIVATE_KEY
-Optional: L1_SETTLEMENT_ADDRESS  L1_CHAIN_ID  TOTAL_BALLOTS  L2_STATE_ROOT  DATA_DIR`);
+Optional: L1_RPC_AUTH_TOKEN (bearer token when the L1 RPC requires auth; empty sends none)
+          L1_SETTLEMENT_ADDRESS  L1_CHAIN_ID  TOTAL_BALLOTS  L2_STATE_ROOT  DATA_DIR`);
     return;
   }
 
@@ -171,6 +175,6 @@ main().catch((err) => {
     );
     return;
   }
-  console.error(err);
+  console.error(redactL1RpcAuth(err && err.stack ? err.stack : err));
   process.exit(1);
 });

@@ -3,6 +3,7 @@
 
 import { createRequire } from 'node:module';
 
+import { redactL1RpcAuth } from '../../../l2/l1RpcAuth.js';
 import { chainElectionId, l1IdentityOf } from './electionIds.mjs';
 
 const require = createRequire(import.meta.url);
@@ -31,6 +32,7 @@ export {
 function l1OptionsFromConfig(config) {
   return {
     rpcUrl: config.l1Rpc,
+    authToken: config.l1RpcAuthToken || '',
     mirrorAddress: config.l1TallyMirrorAddress,
     privateKey: config.l1PublisherPrivateKey,
     settlementAddress: config.l1SettlementAddress,
@@ -200,7 +202,7 @@ export function createL1Certifier(config, hooks = {}) {
           posted: false,
           skipped: false,
           status: 'failed',
-          error: err.message || String(err),
+          error: redactL1RpcAuth(err.message || String(err), options.authToken || ''),
           resultHash: hash,
           totalBallots,
           l2StateRoot: l2StateRoot || ZERO_HASH,

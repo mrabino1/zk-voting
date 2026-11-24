@@ -65,6 +65,7 @@ COPY --chown=node:node l2/disclosure.mjs ./l2/disclosure.mjs
 COPY --chown=node:node l2/sequencer/state.mjs ./l2/sequencer/state.mjs
 # L2 identity, operator auth and L1 funding helpers (state.mjs imports adminAuth).
 COPY --chown=node:node l2/adminAuth.mjs l2/identity.mjs ./l2/
+COPY --chown=node:node l2/l1RpcAuth.js ./l2/l1RpcAuth.js
 COPY --chown=node:node l2/prover/funding.mjs ./l2/prover/funding.mjs
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh

@@ -153,6 +153,7 @@ npm run l2:archive          # on by default; warns and does not delete without a
 | `ARCHIVE_HOT_WINDOW_HOURS` | `2` | Keep this many hours of block JSON on the VPS after a successful upload+checksum. |
 | `ARCHIVE_MIN_FREE_BYTES` | `8MiB` | Below this, skip extra local copies; still offload sealed hours. Failure matrix: [`docs/OPERATOR.md`](../docs/OPERATOR.md). |
 | `L1_RPC` | unset | Ethereum RPC for settlement |
+| `L1_RPC_AUTH_TOKEN` | unset | Optional bearer token for an L1 RPC that requires auth. Empty sends no Authorization header. |
 | `SETTLEMENT_ADDRESS` | unset | `RollupSettlement` on L1 |
 | `PRIVATE_KEY` | unset | prover key authorized to call `submitBatch` |
 

@@ -87,6 +87,7 @@ Never commit `.env`, and never bake secrets into an image.
 | `DISCLOSURE_MIN_BLOCK_VOTES` | `10` | Do not publish a disclosure block smaller than this. Short hours merge forward. A whole election under this floor waits for the final tally. |
 | `ZK_VOTING_NODE_URL` | `http://node:3000` | Where L2 services reach the Node. The name is kept for compatibility. |
 | `L1_RPC`, `L1_CHAIN_ID`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `SETTLEMENT_ADDRESS` | empty | Optional Ethereum L1 certification. Empty is a no-op. |
+| `L1_RPC_AUTH_TOKEN` | empty | Optional bearer token for an L1 JSON-RPC endpoint that requires auth. When set, L1 calls send `Authorization: Bearer <token>`. Empty sends no Authorization header. |
 
 ## Archive (S3 / R2)
 
