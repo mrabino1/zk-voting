@@ -71,6 +71,13 @@ services:
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
       # Empty or omitted is a real election. Set true or 1 only on the public demo.
       IS_DEMO: ${IS_DEMO:-}
+      # Who runs this site (footer contact, source / project / forum links). /setup can set
+      # these too; see docs/self-hosting/configuration.md "Site identity".
+      SITE_CONTACT_EMAIL: ${SITE_CONTACT_EMAIL:-}
+      SITE_CONTRACTING_CTA: ${SITE_CONTRACTING_CTA:-}
+      SITE_SOURCE_URL: ${SITE_SOURCE_URL:-}
+      SITE_PROJECT_URL: ${SITE_PROJECT_URL:-}
+      SITE_FORUM_URL: ${SITE_FORUM_URL:-}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-}
       ALLOW_SMART_CARD_MOCK: ${ALLOW_SMART_CARD_MOCK:-}

@@ -34,6 +34,8 @@ A fork that edits core files gets merge conflicts on every release. Put your cha
 
 | Change | Where |
 | --- | --- |
+| Footer contact, contracting offer, source / About / forum links | `/setup` → "Who runs this site", or `SITE_*` ([Site identity](./configuration.md#site-identity)). Defaults show no contact and no offer; point the source link at your fork. |
+| The marketing site in `site/` | It is the upstream project's own site (zk-voting.org). You do not need to deploy it; if you do, edit its text and links in your fork. |
 | Name, tagline, logo, office subtitle | `BRAND_NAME`, `BRAND_SHORT_NAME`, `BRAND_TAGLINE`, `CLIENT_*` in `.env`, or Site admin > Appearance > Branding |
 | Colours, radius, spacing | Site admin > Appearance (layout theme tokens: `project` is the button and accent colour, `project-text` its light text form). For more, override the custom properties in the first `:root` block of `apps/node/public/voter-theme.css` (voter pages) or `styles.css` (office pages) from a stylesheet you add, not by editing rules. |
 | Home page and public text | The CMS at `/office/site` |

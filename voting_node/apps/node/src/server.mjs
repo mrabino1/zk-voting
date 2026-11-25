@@ -30,6 +30,7 @@ import { createPinService } from './pin.mjs';
 import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
 import { applyPlatformEnv, recordFilled } from './platformEnv.mjs';
+import { applySiteIdentityHtml, resolveSiteIdentity, withIdentityMeta } from './siteIdentity.mjs';
 
 const { applyInstallEnv } = createRequire(import.meta.url)('@zk-voting/chain-client/install');
 import { isVoteElection, voteResultsSealed } from './electionType.mjs';
@@ -236,7 +237,7 @@ function withNavPlacement(html, placement) {
   return html.replace(/<html\b/i, `<html data-nav="${placement === 'sidebar' ? 'sidebar' : 'top'}"`);
 }
 
-function spaFallback(config, layoutService) {
+function spaFallback(config, layoutService, store) {
   const currentBranding = () => {
     const b = layoutService.effective().layout.branding;
     const client = config.clientBrand;
@@ -267,12 +268,21 @@ function spaFallback(config, layoutService) {
       if (fs.existsSync(file)) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache');
+        // Who runs this site and which project it runs (src/siteIdentity.mjs): a fork's
+        // pages never advertise the upstream project's inbox or services.
+        let identity = null;
+        try {
+          identity = resolveSiteIdentity({ saved: store?.data?.siteIdentity });
+        } catch {
+          identity = null;
+        }
         fs.promises.readFile(file, 'utf8').then(
-          (html) => res.send(renderPublicHtml(withNavPlacement(brandHtml(html, branding), placement), {
+          (html) => res.send(renderPublicHtml(withIdentityMeta(applySiteIdentityHtml(withNavPlacement(brandHtml(html, branding), placement), identity), identity), {
             voteFqdn: config.voteFqdn,
             assetVersion: config.assetVersion,
             clientBrand: config.clientBrand,
             logoUrl: branding.logoUrl,
+            projectUrl: identity ? identity.projectUrl : undefined,
           })),
           (err) => next(err),
         );
@@ -516,7 +526,7 @@ export async function createApp(overrides = {}) {
   app.use(versionedPublicScripts(config.publicDir, config.assetVersion));
   app.use(serveStaticNoHtml(config.distDir));
   app.use(serveStaticNoHtml(config.publicDir));
-  app.use(spaFallback(config, layoutService));
+  app.use(spaFallback(config, layoutService, store));
 
   app.use((req, res) => {
     if (req.path.startsWith('/api') || req.path === '/health') {

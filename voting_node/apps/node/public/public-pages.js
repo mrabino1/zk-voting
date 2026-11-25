@@ -284,10 +284,10 @@ export function renderPublicHome(main, ctx, bundle) {
           { class: "field-hint" },
           "Officials create ballots and freeze the roll from the ",
           h("a", { href: "/office", text: "admin hub" }),
-          ". Want to know what ZK Voting is and why it matters? ",
-          h("a", { href: MAIN_SITE_URL, text: "Visit zk-voting.org" }),
-          " · ",
-          h("a", { href: COMMUNITY_URL, text: "Community forum" })
+          ".",
+          MAIN_SITE_URL ? [" Want to know what ZK Voting is and why it matters? ", h("a", { href: MAIN_SITE_URL, text: `Visit ${hostOf(MAIN_SITE_URL)}` })] : null,
+          MAIN_SITE_URL && COMMUNITY_URL ? " · " : COMMUNITY_URL ? " " : null,
+          COMMUNITY_URL ? h("a", { href: COMMUNITY_URL, text: "Community forum" }) : null
         )
   );
 }
@@ -613,3 +613,11 @@ export function renderOffice(main, ctx, bundle) {
 }
 
 export { DEMO_NOTE };
+
+function hostOf(url) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}

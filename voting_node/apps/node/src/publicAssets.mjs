@@ -33,10 +33,21 @@ function escapeAttr(value) {
     .replace(/>/g, '&gt;');
 }
 
-const POWERED_BY =
-  '<p class="powered-by"><a class="powered-by-link" href="https://zk-voting.org">' +
-  '<img class="powered-by-mark" src="/brand-mark.svg" alt="" width="16" height="16" />' +
-  'powered by zk-voting.org</a></p>';
+/** The discreet credit on a client host. `projectUrl` "" (SITE_PROJECT_URL=none) drops it. */
+function poweredBy(projectUrl = 'https://zk-voting.org') {
+  if (!projectUrl) return '';
+  let host = projectUrl;
+  try {
+    host = new URL(projectUrl).host;
+  } catch {
+    /* keep as given */
+  }
+  return (
+    `<p class="powered-by"><a class="powered-by-link" href="${escapeAttr(projectUrl)}">` +
+    '<img class="powered-by-mark" src="/brand-mark.svg" alt="" width="16" height="16" />' +
+    `powered by ${escapeAttr(host)}</a></p>`
+  );
+}
 
 /**
  * A deployed host (VOTE_FQDN) is the client's site. Drop the civic ribbon,
@@ -81,7 +92,7 @@ export function applyClientHostHtml(html, clientBrand) {
     const withClass = /\bsite-footer-client\b/.test(attrs)
       ? attrs
       : attrs.replace(/\bclass="([^"]*)"/, 'class="$1 site-footer-client"');
-    return `<footer${withClass}>${POWERED_BY}</footer>`;
+    return `<footer${withClass}>${poweredBy(clientBrand.projectUrl)}</footer>`;
   });
   out = out.replace(/\sdata-i18n="chrome\.titleHome"/g, '');
   out = out.replace(/\sdata-i18n-content="chrome\.metaDescription"/g, '');
@@ -125,11 +136,12 @@ export function applyHeaderLogo(html, logoUrl) {
   );
 }
 
-export function renderPublicHtml(html, { voteFqdn = '', assetVersion: version = '', clientBrand = null, logoUrl = '' } = {}) {
+export function renderPublicHtml(html, { voteFqdn = '', assetVersion: version = '', clientBrand = null, logoUrl = '', projectUrl } = {}) {
   let out = String(html || '');
   if (String(voteFqdn || '').trim()) {
     out = stripNamedHostDemo(out);
-    out = applyClientHostHtml(out, clientBrand?.active ? clientBrand : { active: true });
+    const brand = clientBrand?.active ? clientBrand : { active: true };
+    out = applyClientHostHtml(out, projectUrl === undefined ? brand : { ...brand, projectUrl });
   }
   const mark = logoUrl || (clientBrand?.active ? clientBrand.logoUrl : '');
   if (mark) out = applyHeaderLogo(out, mark);
