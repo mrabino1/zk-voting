@@ -57,6 +57,21 @@ they filled (never the values). A variable you set always wins.
 | `PUBLIC_BASE_URL` | empty → `https://$VOTE_FQDN` | Origin printed in official-outcome QR codes. |
 | `TRUST_PROXY` | empty | Set `1` behind a reverse proxy or Tailscale so rate limits see the real client. |
 
+## Site identity
+
+Who runs this site and which project it runs. Every page's footer and a few links show these.
+This repository is forked, so the defaults never send a fork's visitors to the upstream
+project's inbox or advertise upstream's services. Set them on `/setup` (step 5, "Who runs this
+site", available any time to the super admin); a value saved there wins over the variable.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SITE_CONTACT_EMAIL` | empty (no contact line) | Public contact address in the footer. |
+| `SITE_CONTRACTING_CTA` | off | `true`: show "We are available for contracting for your local implementation" with an Email button (needs `SITE_CONTACT_EMAIL`). |
+| `SITE_SOURCE_URL` | the upstream repository | "Open source" link and GitHub icon. **AGPL-3.0:** if your site runs modified code, point this at your fork's repository. Cannot be hidden. |
+| `SITE_PROJECT_URL` | `https://zk-voting.org` | The "About" link, "What ZK Voting is" and "powered by". `none` hides them. |
+| `SITE_FORUM_URL` | `https://community.zk-voting.org` | Community forum link. `none` hides it; set your own [Discourse](./discourse.md) if you run one. |
+
 ## Storage
 
 | Variable | Default | Purpose |

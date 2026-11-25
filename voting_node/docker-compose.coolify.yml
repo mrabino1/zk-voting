@@ -68,6 +68,12 @@ services:
       ENTROPY_CEREMONY_URL: ${ENTROPY_CEREMONY_URL:-}
       ZK_ENTROPY: ${ZK_ENTROPY:-}
       IS_DEMO: ${IS_DEMO:-}
+      # Who runs this site (footer). Usually set on /setup instead; see configuration.md.
+      SITE_CONTACT_EMAIL: ${SITE_CONTACT_EMAIL:-}
+      SITE_CONTRACTING_CTA: ${SITE_CONTRACTING_CTA:-}
+      SITE_SOURCE_URL: ${SITE_SOURCE_URL:-}
+      SITE_PROJECT_URL: ${SITE_PROJECT_URL:-}
+      SITE_FORUM_URL: ${SITE_FORUM_URL:-}
       # Email (sign-in codes, receipts). Optional; see docs/self-hosting/configuration.md.
       SES_FROM_ADDRESS: ${SES_FROM_ADDRESS:-}
       AWS_REGION: ${AWS_REGION:-}

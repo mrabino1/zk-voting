@@ -111,10 +111,24 @@ export function signInHref(next) {
   return `/signin?next=${encodeURIComponent(safe)}`;
 }
 
+/**
+ * Per-site project links. The server writes them as <meta name="site-project-url"> and
+ * <meta name="site-forum-url"> (src/siteIdentity.mjs; SITE_PROJECT_URL / SITE_FORUM_URL or
+ * Site admin). An empty value means this site hides that link. Without the tags (tests,
+ * static hosting) the upstream project's links apply.
+ */
+function siteMeta(name, fallback) {
+  try {
+    const el = typeof document !== "undefined" ? document.querySelector(`meta[name="${name}"]`) : null;
+    return el ? el.getAttribute("content") || "" : fallback;
+  } catch {
+    return fallback;
+  }
+}
 /** Main informational site (what ZK Voting is and why). Not part of the demo. */
-export const MAIN_SITE_URL = "https://zk-voting.org";
+export const MAIN_SITE_URL = siteMeta("site-project-url", "https://zk-voting.org");
 /** Community discussion forum (Discourse). */
-export const COMMUNITY_URL = "https://community.zk-voting.org";
+export const COMMUNITY_URL = siteMeta("site-forum-url", "https://community.zk-voting.org");
 
 export function mainNav(audience, extraNav = [], options = {}) {
   const extra = Array.isArray(extraNav) ? extraNav.filter((i) => i && i.href && i.label) : [];
@@ -123,7 +137,7 @@ export function mainNav(audience, extraNav = [], options = {}) {
   // receipt, tally). Informational content lives on the main site.
   // A deployed client (VOTE_FQDN) is that client's face, so the About link
   // to zk-voting.org is omitted. The footer keeps the discreet powered-by.
-  const mainSite = options && options.clientHost ? null : { href: MAIN_SITE_URL, label: t("chrome.navAbout"), spa: false };
+  const mainSite = (options && options.clientHost) || !MAIN_SITE_URL ? null : { href: MAIN_SITE_URL, label: t("chrome.navAbout"), spa: false };
   if (audience === "public") {
     return [
       ...polls,

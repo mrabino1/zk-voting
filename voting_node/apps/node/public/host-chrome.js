@@ -56,21 +56,33 @@ export function paintClientHost(doc, config) {
     nameEl.textContent = brand.name;
   }
   const footer = doc.querySelector("footer.site-footer");
-  if (footer && !footer.querySelector(".powered-by")) {
+  // The server writes this site's project link (SITE_PROJECT_URL, "" when hidden).
+  const projectMeta = doc.querySelector('meta[name="site-project-url"]');
+  const projectUrl = projectMeta ? projectMeta.getAttribute("content") || "" : "https://zk-voting.org";
+  if (footer && !footer.querySelector(".powered-by") && !projectUrl) {
+    footer.classList.add("site-footer-client");
+    footer.textContent = "";
+  } else if (footer && !footer.querySelector(".powered-by")) {
     footer.classList.add("site-footer-client");
     footer.textContent = "";
     const p = doc.createElement("p");
     p.className = "powered-by";
     const a = doc.createElement("a");
     a.className = "powered-by-link";
-    a.href = "https://zk-voting.org";
+    a.href = projectUrl;
     const img = doc.createElement("img");
     img.className = "powered-by-mark";
     img.src = "/brand-mark.svg";
     img.alt = "";
     img.width = 16;
     img.height = 16;
-    a.append(img, doc.createTextNode("powered by zk-voting.org"));
+    let host = projectUrl;
+    try {
+      host = new URL(projectUrl).host;
+    } catch {
+      /* keep as given */
+    }
+    a.append(img, doc.createTextNode(`powered by ${host}`));
     p.append(a);
     footer.append(p);
   }

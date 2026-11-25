@@ -86,7 +86,8 @@ function siteStep(ctx) {
             h("span", { class: "field-hint", text: `Shown in the header, emails and receipts. Empty = ${site.productNameDefault} (BRAND_NAME or the default). The header logo stays the built-in mark until Site admin > Layout & appearance > Branding sets another. Site admin can change the name later too.` })
           ),
           h("div", { class: "actions" }, h("button", { class: "btn", type: "submit", disabled: state.busy, text: "Save product name" }))
-        )
+        ),
+    identityForm(h, ctx)
   );
 }
 
@@ -118,6 +119,92 @@ function addressHelp(h, site) {
     h("code", { text: "voting_node/.env" }),
     ") and restart.",
   ];
+}
+
+/**
+ * "Who runs this site": the footer contact and the source / project / forum links.
+ * This repository is forked; a fork's footer must not send visitors to the upstream
+ * project's inbox. Editable after setup finishes (PUT /api/setup/identity).
+ */
+function identityForm(h, { state, run, api, isSuper }) {
+  const site = state.status?.site;
+  const id = site?.identity;
+  if (!id || !isSuper()) return null;
+  if (!state.identity) {
+    state.identity = {
+      contactEmail: id.contactEmail || "",
+      contractingCta: Boolean(id.contractingCta),
+      sourceUrl: id.sourceUrl || "",
+      projectUrl: id.projectUrl || "",
+      forumUrl: id.forumUrl || "",
+    };
+  }
+  const f = state.identity;
+  const fixedNote = (field) =>
+    id.sources?.[field] === "environment" ? h("span", { class: "field-hint", text: "Currently set by an environment variable; saving here overrides it." }) : null;
+  const input = (field, label, hint, type = "url") =>
+    h(
+      "label",
+      { class: "field", for: `setup-identity-${field}` },
+      h("span", { class: "field-label", text: label }),
+      h("input", {
+        id: `setup-identity-${field}`,
+        type,
+        autocomplete: "off",
+        spellcheck: "false",
+        value: f[field],
+        onInput: (e) => {
+          f[field] = e.target.value;
+        },
+      }),
+      h("span", { class: "field-hint", text: hint }),
+      fixedNote(field)
+    );
+  const save = (event) => {
+    event.preventDefault();
+    run(async () => {
+      state.status = await api("/api/setup/identity", {
+        method: "PUT",
+        body: {
+          contactEmail: f.contactEmail,
+          contractingCta: f.contractingCta,
+          sourceUrl: f.sourceUrl,
+          projectUrl: f.projectUrl || "none",
+          forumUrl: f.forumUrl || "none",
+        },
+      });
+      state.identity = null;
+      state.info = "Saved. Every page's footer now shows these.";
+    });
+  };
+  return h(
+    "form",
+    { class: "stack", onSubmit: save, id: "setup-identity" },
+    h("h3", { text: "Who runs this site" }),
+    h("p", { class: "field-hint", text: "Shown in every page's footer. Leave the contact empty to show none; the upstream project's address is never used on your site." }),
+    input("contactEmail", "Public contact email", "Where visitors can reach the people who run this site.", "email"),
+    h(
+      "label",
+      { class: "check-row", for: "setup-identity-contractingCta" },
+      h("input", {
+        id: "setup-identity-contractingCta",
+        type: "checkbox",
+        checked: f.contractingCta,
+        onChange: (e) => {
+          f.contractingCta = Boolean(e.target.checked);
+        },
+      }),
+      h("span", { text: "Offer implementation help to other organisations in the footer (needs a contact email)." })
+    ),
+    input(
+      "sourceUrl",
+      "Source code of this site",
+      "Your fork's repository, for example https://github.com/your-org/zk-voting. The AGPL licence requires a site running modified code to offer its own source."
+    ),
+    input("projectUrl", "About the project", "Where the About link points. Empty hides it."),
+    input("forumUrl", "Community forum", "Your own Discourse, the project's forum, or empty to hide it."),
+    h("div", { class: "actions" }, h("button", { class: "btn", type: "submit", disabled: state.busy, text: "Save site details" }))
+  );
 }
 
 function formatEth(wei) {

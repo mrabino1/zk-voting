@@ -56,6 +56,7 @@ import {
 import { appendSiteAudit } from '../siteAudit.mjs';
 import { saveVotingMode, votingSetupStatus } from '../votingSetup.mjs';
 import { insecurePublicUrl, settingSource } from '../platformEnv.mjs';
+import { parseIdentityInput, resolveSiteIdentity } from '../siteIdentity.mjs';
 import { requireAcceptedTerms } from '../terms.mjs';
 import {
   ENTROPY_MODES,
@@ -70,7 +71,8 @@ import {
  * this deployment. Never a secret: the database is reported by kind and the
  * setup token as set / not set.
  */
-export function siteInfo({ config, layoutService }) {
+export function siteInfo(deps) {
+  const { config, layoutService } = deps;
   const branding = layoutService?.effective().layout.branding || {};
   const saved = layoutService?.saved().branding || {};
   return {
@@ -94,6 +96,8 @@ export function siteInfo({ config, layoutService }) {
       database: settingSource('DATABASE_URL'),
     },
     publicBaseUrl: config.publicBaseUrl || null,
+    // Who runs this site and which project it runs (src/siteIdentity.mjs).
+    identity: resolveSiteIdentity({ saved: deps.store?.data?.siteIdentity }),
     // Passkeys need HTTPS on any real host name. A Coolify test domain is often plain http.
     insecureHttp: insecurePublicUrl(config.publicBaseUrl, config.voteFqdn),
   };
@@ -312,6 +316,38 @@ export function setupRouter(deps) {
       }
       setup.entropy = entropy;
       await store.persist();
+      res.json(setupStatus(deps, req));
+    }),
+  );
+
+  // Site identity: the footer contact, the contracting offer, and the source / project /
+  // forum links. Super admin; stays editable after setup finishes.
+  router.put(
+    '/identity',
+    requireSuperAdmin,
+    asyncHandler(async (req, res) => {
+      let parsed;
+      try {
+        parsed = parseIdentityInput(req.body || {});
+      } catch (err) {
+        throw new HttpError(400, err.message, { code: 'SETUP_BAD_IDENTITY' });
+      }
+      const before = { ...(store.data.siteIdentity || {}) };
+      const next = { ...before };
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v === null) delete next[k];
+        else next[k] = v;
+      }
+      store.data.siteIdentity = next;
+      await appendSiteAudit(store, {
+        actor: req.user,
+        method: 'PUT',
+        path: '/api/setup/identity',
+        area: 'setup',
+        action: 'site identity saved',
+        before,
+        after: next,
+      });
       res.json(setupStatus(deps, req));
     }),
   );
