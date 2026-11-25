@@ -601,7 +601,12 @@ function electionCard(election, me, store) {
   const st = electionStateInfo(election.state);
   const vs = voterStatusForElection(election, me, store);
   const canVote = election.state === 2 && vs.key !== "disqualified" && vs.key !== "recorded";
-  const canRegister = election.state <= 2 && vs.key === "not_registered";
+  // A poll's roll is closed once frozen. A civic vote's roll lives on L1, which accepts
+  // new voters until startTime (ZkVotingRollup.registerVoters → _beforeStart).
+  const rollOpen =
+    election.state === 0 ||
+    (election.state === 1 && election.electionTypeName === "vote" && Date.now() / 1000 < Number(election.startTime));
+  const canRegister = rollOpen && vs.key === "not_registered";
   const roll = `${election.participantCount} registered${
     election.maxParticipants ? ` / cap ${election.maxParticipants}` : " (unlimited)"
   }`;
@@ -648,58 +653,167 @@ function electionGrid(elections, me, store, emptyText) {
   return contestGrid(h, elections.map((election) => electionCard(election, me, store)));
 }
 
+/**
+ * The voter's to-do list, in the order they do it. Each item is done or not, with
+ * one link to where it gets done. Mirrors what the ballot page checks before casting.
+ */
+function readinessSteps({ me, walletRecord, yours, store }) {
+  const identity = me?.identity || {};
+  const emailOk = Boolean(identity.primaryEmail) || (identity.emails || []).some((e) => e.verified);
+  const passkeyOk = Boolean(walletRecord && !walletRecord.staleWrap);
+  const pinOk = Boolean(identity.pinBound);
+  const onRoll = yours.length > 0;
+  const openForMe = yours.filter((e) => e.state === 2 && !["disqualified", "recorded"].includes(voterStatusForElection(e, me, store).key));
+  const steps = [
+    {
+      id: "email",
+      done: emailOk,
+      text: emailOk ? `Email verified (${identity.primaryEmail || "on file"}).` : "Verify your email. Sign-in codes and receipts go there.",
+      href: "/verify",
+      cta: "Verify email",
+    },
+    {
+      id: "passkey",
+      done: passkeyOk,
+      text: passkeyOk
+        ? "Passkey ready on this device."
+        : walletRecord?.staleWrap
+          ? "This device has an old passkey. Reset it and create a new one."
+          : "Create a passkey on this device. It keeps your ballot secret and proves it is yours.",
+      href: "/register",
+      cta: walletRecord?.staleWrap ? "Reset passkey" : "Create passkey",
+    },
+    {
+      id: "pin",
+      done: pinOk,
+      text: pinOk ? "Vote PIN set." : "Set a 4–8 digit vote PIN. You tap it on a shuffled keypad when you cast.",
+      href: "#vote-pin",
+      cta: "Set PIN",
+    },
+    {
+      id: "register",
+      done: onRoll,
+      text: onRoll
+        ? `On the roll for ${yours.length} election${yours.length === 1 ? "" : "s"}.`
+        : "Register for an election so you are on its voter roll.",
+      href: "#more-heading",
+      cta: "Find an election",
+    },
+  ];
+  const ready = steps.every((st) => st.done);
+  let vote;
+  if (openForMe.length) {
+    vote = {
+      id: "vote",
+      done: false,
+      text: `${openForMe.length} ballot${openForMe.length === 1 ? " is" : "s are"} open for you: ${openForMe.map((e) => e.title).join(", ")}.`,
+      href: `/vote/${encodeURIComponent(openForMe[0].id)}`,
+      cta: "Vote now",
+      primary: true,
+    };
+  } else {
+    const upcoming = yours
+      .filter((e) => e.state < 2)
+      .sort((a, b) => Number(a.startTime) - Number(b.startTime))[0];
+    vote = {
+      id: "vote",
+      done: false,
+      text: upcoming
+        ? `No ballot is open for you right now. Next: ${upcoming.title} opens ${formatTime(upcoming.startTime)}.`
+        : "No ballot is open for you right now.",
+      href: null,
+      cta: null,
+    };
+  }
+  return { steps, vote, ready };
+}
+
+function renderReadiness(bundle, yours) {
+  const { steps, vote, ready } = readinessSteps({ ...bundle, yours });
+  const done = steps.filter((st) => st.done).length;
+  const item = (st, n) =>
+    h(
+      "li",
+      { class: `ready-step ${st.done ? "is-done" : st.href ? "is-todo" : "is-wait"}` },
+      h("span", { class: "ready-mark", "aria-hidden": "true", text: st.done ? "✓" : String(n) }),
+      h(
+        "span",
+        { class: "ready-text" },
+        h("span", { class: "visually-hidden", text: st.done ? "Done: " : st.href ? "To do: " : "Status: " }),
+        st.text
+      ),
+      !st.done && st.href
+        ? h("a", {
+            class: st.primary ? "btn" : "btn btn-secondary",
+            href: st.href,
+            ...(st.href.startsWith("/")
+              ? { "data-nav": "" }
+              : {
+                  // Same-page target: scroll there without a hash change (which re-renders the desk).
+                  onClick: (event) => {
+                    event.preventDefault();
+                    const target = document.getElementById(st.href.slice(1));
+                    if (!target) return;
+                    target.scrollIntoView({ block: "start", behavior: "smooth" });
+                    target.focus({ preventScroll: true });
+                  },
+                }),
+            text: st.cta,
+          })
+        : null
+    );
+  return h(
+    "section",
+    { class: "panel ready-panel", "aria-labelledby": "ready-heading" },
+    h("h2", { id: "ready-heading", text: ready ? "You are ready to vote" : "Get ready to vote" }),
+    h("p", {
+      class: "field-hint",
+      text: ready ? "Everything is set up on this device." : `${done} of ${steps.length} done. Do these once; then voting takes about a minute.`,
+    }),
+    h("ol", { class: "ready-list" }, ...steps.map((st, i) => (ready ? null : item(st, i + 1))).filter(Boolean), item(vote, steps.length + 1))
+  );
+}
+
 function renderDesk(main, route, bundle) {
   const { elections, source, me, walletRecord, store, outcomeSubscriptions } = bundle;
   const signedIn = Boolean(me?.user);
-  const openCount = elections.filter((e) => e.state === 2).length;
-  const walletLine = walletRecord?.staleWrap
-    ? "This device has a v1 passkey wrap (identity was derived from the account seed). Reset it on Register, then create a new passkey."
-    : walletRecord
-      ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
-      : "No passkey on this device yet.";
   const yours = elections.filter((election) => voterStatusForElection(election, me, store).key !== "not_registered");
   const others = elections.filter((election) => voterStatusForElection(election, me, store).key === "not_registered");
+  const refresh = async () => {
+    const next = await loadDeskBundle();
+    renderDesk(main, route, next);
+  };
 
   main.replaceChildren(
     ...[
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: "Registered desk" }),
+      h("p", { class: "kicker", text: "My desk" }),
       h("h1", { text: signedIn ? "Your elections" : "Sign in to your desk" }),
       h(
         "p",
         { class: "lede" },
-        document.documentElement?.dataset?.clientHost === "1"
-          ? "This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results."
-          : `This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results. ${brandName()} is not a commercial product.`
+        signedIn
+          ? `Signed in as ${me.user.handle}. Get set up once, then vote in the elections you are registered for. Your choices are never shown here or on any receipt.`
+          : "Sign in to see the elections you are registered for, your ballots and your receipts."
       ),
-      h(
-        "div",
-        { class: "notice", role: "status" },
-        h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
-        h("p", { text: walletLine }),
-        me?.user
-          ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}. ${identityCapNote(me.identity)}` })
-          : h("p", { text: "Sign in below with email, Ethereum, a smart card, or a license/passport if you already have a person record on this Node." }),
-        h("p", {
-          text: "Public turnout and explorer vote proofs publish once an hour, after that hour closes. A person leaving a voting office cannot be matched to a live jurisdiction tick.",
-        }),
-        source === "sample"
-          ? h("p", {
+      source === "sample"
+        ? h(
+            "div",
+            { class: "notice", role: "status" },
+            h("p", {
               text: "Showing the built-in sample roll because /api/elections is not available. When the Node API is up, this list is the live calendar.",
             })
-          : null
-      ),
+          )
+        : null,
       signedIn
         ? h(
             "div",
             { class: "cta-row" },
-            h("a", { class: "btn", href: "/register", "data-nav": "", text: "Register for more elections" }),
             h("a", { class: "btn btn-secondary", href: "/receipt", "data-nav": "", text: "Check a receipt" }),
-            h("a", { class: "btn btn-secondary", href: "/outcomes", "data-nav": "", text: "Outcomes monitor" }),
-            h("a", { class: "btn btn-secondary", href: "/outcomes/verify", "data-nav": "", text: "Verify outcome PDF" }),
             h("a", { class: "btn btn-secondary", href: "/elections", "data-nav": "", text: "All results" }),
+            h("a", { class: "btn btn-secondary", href: "/outcomes", "data-nav": "", text: "Outcomes monitor" }),
             audienceOf(me) === "officer"
               ? h("a", { class: "btn btn-secondary", href: "/office", "data-nav": "", text: "Admin hub" })
               : null,
@@ -716,44 +830,7 @@ function renderDesk(main, route, bundle) {
         : null
     ),
     signedIn ? null : h("div", { id: "sign-in-root" }),
-    h(
-      "section",
-      { "aria-labelledby": "identity-heading" },
-      h("h2", { id: "identity-heading", text: "Identity status" }),
-      renderDeviceStatus(walletRecord, me, store, {
-        api,
-        onRefresh: async () => {
-          const next = await loadDeskBundle();
-          renderDesk(main, route, next);
-        },
-      })
-    ),
-    signedIn
-      ? renderApiKeysSection(h, {
-          api,
-          keys: bundle.apiKeys,
-          onRefresh: async () => {
-            const next = await loadDeskBundle();
-            renderDesk(main, route, next);
-          },
-        })
-      : null,
-    h(
-      "section",
-      { "aria-labelledby": "outcome-sub-heading" },
-      h("h2", { id: "outcome-sub-heading", text: "Official outcome reports" }),
-      h("p", {
-        text: "Subscribing is opt-in and separate from voting: casting a ballot never subscribes you. Subscribe to any contest here; the official PDF is emailed only after voting time has completely expired and a final tally is posted.",
-      }),
-      renderOutcomeSubscriptions(outcomeSubscriptions, {
-        h,
-        api,
-        onRefresh: async () => {
-          const next = await loadDeskBundle();
-          renderDesk(main, route, next);
-        },
-      })
-    ),
+    signedIn ? renderReadiness(bundle, yours) : null,
     h(
       "section",
       { "aria-labelledby": "yours-heading" },
@@ -763,16 +840,43 @@ function renderDesk(main, route, bundle) {
         me,
         store,
         signedIn
-          ? "You are not on a roll for any published election yet. Register below."
+          ? "You are not on a roll for any published election yet. Register for one below."
           : "Sign in to see elections you are registered or eligible for."
       )
     ),
     h(
       "section",
       { "aria-labelledby": "more-heading" },
-      h("h2", { id: "more-heading", text: "Register for more elections" }),
-      electionGrid(others, me, store, "No additional published elections on this Node.")
+      h("h2", { id: "more-heading", tabindex: "-1", text: "Other elections you can join" }),
+      electionGrid(others, me, store, "No other published elections on this Node.")
     ),
+    h(
+      "section",
+      { "aria-labelledby": "identity-heading" },
+      h("h2", { id: "identity-heading", text: "Your identity and sign-in methods" }),
+      renderDeviceStatus(walletRecord, me, store, { api, onRefresh: refresh })
+    ),
+    h(
+      "section",
+      { "aria-labelledby": "outcome-sub-heading" },
+      h("h2", { id: "outcome-sub-heading", text: "Official outcome reports" }),
+      h("p", {
+        text: "Optional. Get the official results PDF by email once voting has ended and the final tally is posted. Voting never subscribes you.",
+      }),
+      renderOutcomeSubscriptions(outcomeSubscriptions, { h, api, onRefresh: refresh })
+    ),
+    signedIn
+      ? h(
+          "details",
+          { class: "desk-advanced" },
+          h("summary", { text: "Advanced: API keys for bots and integrations" }),
+          renderApiKeysSection(h, { api, keys: bundle.apiKeys, onRefresh: refresh })
+        )
+      : null,
+    h("p", {
+      class: "field-hint",
+      text: "Public turnout and vote proofs publish once an hour, after that hour closes, so nobody can match a person leaving a voting place to a ballot.",
+    }),
     ].filter(Boolean)
   );
   const signInRoot = main.querySelector("#sign-in-root");
@@ -929,12 +1033,25 @@ function renderDeviceStatus(walletRecord, me, store, { api, onRefresh } = {}) {
     }
   }
 
+  // Everyday facts first; commitments, local addresses and counters are for the curious.
+  const TECH = new Set(["Identity commitment", "Local address", "Local roll receipts", "Local ballot receipts", "Node /api/me"]);
+  const everyday = [];
+  const technical = [];
+  for (let i = 0; i < rows.length; i += 2) {
+    (TECH.has(rows[i].textContent) ? technical : everyday).push(rows[i], rows[i + 1]);
+  }
   return h(
     "div",
     { class: "panel" },
-    h("dl", { class: "status-dl" }, ...rows),
-    h("p", { class: "field-hint", text: identityCapNote(identity) }),
-    h("p", { class: "field-hint", text: wallet.PRODUCTION_ADDRESS_NOTE }),
+    h("dl", { class: "status-dl" }, ...everyday),
+    h(
+      "details",
+      { class: "tech-details" },
+      h("summary", { text: "Technical details" }),
+      h("dl", { class: "status-dl" }, ...technical),
+      h("p", { class: "field-hint", text: identityCapNote(identity) }),
+      h("p", { class: "field-hint", text: wallet.PRODUCTION_ADDRESS_NOTE })
+    ),
     signedIn
       ? [
           h("h3", { text: "Emails" }),
@@ -991,16 +1108,20 @@ function renderDeviceStatus(walletRecord, me, store, { api, onRefresh } = {}) {
             text: "Civil officers may revoke a card or license when that registration has expired. Bind additional IDs on Identify yourself.",
           }),
           renderCivicCredentials(h, identity, { busy: ui.busy }),
-          renderPinManager(h, {
-            api,
-            identity,
-            ui,
-            announce: () => {},
-            busy: ui.busy,
-            onUpdated: async () => {
-              if (onRefresh) await onRefresh();
-            },
-          }),
+          h(
+            "div",
+            { id: "vote-pin", tabindex: "-1" },
+            renderPinManager(h, {
+              api,
+              identity,
+              ui,
+              announce: () => {},
+              busy: ui.busy,
+              onUpdated: async () => {
+                if (onRefresh) await onRefresh();
+              },
+            })
+          ),
         ]
       : null,
     ui.error ? h("p", { class: "error-inline", role: "alert", text: ui.error }) : null,

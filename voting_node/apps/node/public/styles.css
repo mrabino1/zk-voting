@@ -4037,3 +4037,80 @@ html[data-client-host="1"] .site-footer {
   }
 }
 
+
+/* ---- My desk: "Get ready to vote" checklist ---- */
+
+.ready-panel h2 {
+  margin-top: 0;
+}
+
+.ready-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.ready-step {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ready-mark {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border: 2px solid var(--border-strong);
+}
+
+.ready-step.is-done .ready-mark {
+  border-color: var(--ok);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.ready-step.is-done .ready-text {
+  color: var(--muted, inherit);
+}
+
+.ready-step.is-todo .ready-mark {
+  border-color: var(--project-text);
+  color: var(--project-text);
+}
+
+@media (max-width: 560px) {
+  .ready-step {
+    grid-template-columns: 2rem 1fr;
+  }
+  .ready-step .btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+.tech-details,
+.desk-advanced {
+  margin: 0.75rem 0;
+}
+
+.tech-details > summary,
+.desk-advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+#vote-pin:focus,
+#more-heading:focus {
+  outline: 3px solid var(--project-text);
+  outline-offset: 4px;
+}

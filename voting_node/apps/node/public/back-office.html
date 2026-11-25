@@ -48,11 +48,10 @@
         <p class="kicker">Voting admin</p>
         <h1>Back office</h1>
         <p class="lede">
-          Clerks stand up elections. Registrars insert identity commitments (never names).
-          Disqualification officers apply the public reason catalog. Tally operators post counts.
-          Choice plaintext never appears here. Turnout and vote proofs on every dashboard publish
-          hourly from the first ballot, after the hour that contained the ballot has closed and
-          the disclosure delay has elapsed — a person leaving a voting office cannot be matched to a live increase.
+          Start with <strong>Elections at a glance</strong>: it lists what needs doing next.
+          Clerks create elections and freeze the roll, registrars add voters, disqualification
+          officers apply the public reason catalog, and tally operators post counts. Nobody's
+          choice is ever shown here.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
           <p class="disclosure-note">
@@ -88,14 +87,34 @@
         data-lede="Clerks, registrars, and officers sign in with email, Ethereum, a smart-card reader, or a license/passport. Roles are unchanged; the Node still enforces them on each action."
       ></div>
 
-      <nav class="local-nav" aria-label="Back-office sections">
-        <a href="#clerk" class="active">Clerk</a>
+      <nav class="local-nav" aria-label="Back-office sections" id="bo-sections">
+        <a href="#overview" class="active" aria-current="true">Overview</a>
+        <a href="#clerk">Clerk</a>
         <a href="#registrar">Registrar</a>
         <a href="#person">Person identity</a>
         <a href="#disqualify">Disqualification</a>
         <a href="#tally">Guardians and tally</a>
         <a href="#notices">Notifications</a>
       </nav>
+
+      <section class="panel" id="overview" aria-labelledby="overview-heading">
+        <header>
+          <h2 id="overview-heading">Elections at a glance</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-overview">Refresh</button>
+        </header>
+        <p class="field-hint">
+          Each election's stage and the one thing that needs doing next. Deadlines for a civic vote
+          come from the ZkVotingRollup contract: the guardian key and any roll changes must be done
+          before voting starts.
+        </p>
+        <div class="overview-filters" role="group" aria-label="Show elections">
+          <button class="btn btn-secondary" type="button" data-overview-filter="todo" aria-pressed="true">Needs action</button>
+          <button class="btn btn-secondary" type="button" data-overview-filter="all" aria-pressed="false">All</button>
+        </div>
+        <ul class="overview-list" id="overview-list" aria-live="polite">
+          <li class="empty">Loading…</li>
+        </ul>
+      </section>
 
       <section class="panel" id="clerk" aria-labelledby="clerk-heading">
         <header>
@@ -727,6 +746,7 @@
     <script src="/disclosure-ui.js"></script>
     <script type="module" src="/signin.js"></script>
     <script type="module" src="/office-gate.js"></script>
+    <script src="/office-next-step.js" defer></script>
     <script src="/back-office.js" defer></script>
     <script type="module" src="/plugin-runtime.js"></script>
   </body>
