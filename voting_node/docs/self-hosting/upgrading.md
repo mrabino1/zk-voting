@@ -15,9 +15,9 @@ Do not deploy `test/unstable` to a host that is running a binding election.
 
 ## Before you upgrade
 
-1. Read the commits or release notes since your current version: `git log --oneline HEAD..origin/master`.
+1. Read the commits or release notes since your current version. In your own clone of the project, `git log --oneline HEAD..origin/master`; in a fork, after `git fetch upstream`, `git log --oneline HEAD..upstream/master` (see [Forking](./forking.md#taking-an-upstream-release)).
 2. Do not upgrade while polls are open unless the change is a security fix.
-3. **Take a backup** of both volumes: [Backups](./backups.md).
+3. **Take a backup** of the data volumes (`postgres-data`, and `install` on the one-click Coolify file): [Backups](./backups.md).
 4. Note the current commit (`git rev-parse HEAD`) so you can [roll back](./rollback.md).
 
 ## Pull the latest build
@@ -27,7 +27,7 @@ Do not deploy `test/unstable` to a host that is running a binding election.
 ```bash
 cd zk-voting
 git fetch origin
-git checkout master && git pull --ff-only
+git checkout master && git pull --ff-only   # a fork: first merge upstream/master and push (forking.md)
 docker compose pull            # refreshes third-party images (tailscale/tailscale:stable)
 docker compose up -d --build   # rebuilds node and l2 from the new source
 curl -fsS http://127.0.0.1:3000/health
@@ -46,7 +46,7 @@ There are no `.sql` files and nothing to run by hand.
 - The Node keeps its data in one JSON file, or in Postgres when `DATABASE_URL` is set. When a new version starts, it fills in any collections or fields that the new code expects and raises the stored schema version (`meta.version`). These upgrades are additive: existing records are not rewritten or removed.
 - Passkey credentials gain `coseAlg` on that boot (JSON file and Postgres migration 3). A missing algorithm is read from the stored COSE key, or set to ES256 (`-7`) when the key does not decode. Details and rollback: [Passkeys](../PASSKEYS.md#passkey-algorithms).
 - Only the process that holds the **writer lease** saves the upgraded file. A standby process upgrades its in-memory copy and writes nothing until it becomes the writer.
-- CI fails any change that adds a `.sql` file, and boots the production image against an empty volume before merge.
+- The CI workflow (`.github/workflows/ci.yml`, started by hand from the Actions tab) fails a change that adds a `.sql` file and boots the production image against an empty volume. It does not run automatically on pushes or pull requests.
 
 Because upgrades are additive, an older build can usually read a file written by a newer one. Still, restore the backup when you [roll back](./rollback.md) across many versions.
 

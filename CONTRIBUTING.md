@@ -1,6 +1,6 @@
 # Contributing
 
-**NOT FOR PROFIT** — civic public good. Not a commercial product. See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
+**NOT FOR PROFIT** — civic public good. Not a commercial product. See [`NOT_FOR_PROFIT.md`](./voting_node/docs/NOT_FOR_PROFIT.md).
 
 ZK-Voting is a public-interest election stack: private ballots, public eligibility and disqualification **process**, Ethereum settlement. There is no token, no paid tier, and no vendor lock-in. If a patch adds fees, skimmable ETH (beyond gas sponsorship), or commercialization copy, it will be rejected.
 
@@ -19,7 +19,7 @@ Jurisdictions are **meant to fork** this repository: run your own Node and, on a
 
 ## Operator script
 
-Hosts use [`system_actions.sh`](./system_actions.sh):
+Hosts use [`voting_node/system_actions.sh`](./voting_node/system_actions.sh) (run it from `voting_node/`):
 
 ```bash
 ./system_actions.sh              # interactive menu
@@ -32,7 +32,7 @@ Hosts use [`system_actions.sh`](./system_actions.sh):
 ./system_actions.sh health
 ```
 
-`deploy-prod` fast-forwards **`master`**. It will refuse a dirty tree. See [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+`deploy-prod` fast-forwards **`master`**. It will refuse a dirty tree. See [`voting_node/docs/OPERATOR.md`](./voting_node/docs/OPERATOR.md).
 
 ## What to change where
 
@@ -52,10 +52,10 @@ Do not put legal names, dates of birth, or street addresses on chain. Do not emi
 ## Tests you should run
 
 ```bash
-# Solidity (from repo root)
-npm run test:contracts
-# equivalent:
+# Solidity
 cd smart-contracts && forge test
+# or, from voting_node/:
+npm run test:contracts
 
 # Fuzz (256 runs is the foundry.toml default)
 cd smart-contracts && forge test --fuzz-runs 256
@@ -96,7 +96,7 @@ Install Foundry (`foundryup`) so `forge` is on `PATH`. Optimizer, solc **0.8.24*
 
 ## Documentation label
 
-Every document you add must carry a visible **NOT FOR PROFIT** label near the top (see `NOT_FOR_PROFIT.md`). Solidity files carry:
+Every document you add must carry a visible **NOT FOR PROFIT** label near the top (see `voting_node/docs/NOT_FOR_PROFIT.md`). Solidity files carry:
 
 ```solidity
 // NOT FOR PROFIT — civic public good, not a commercial product.
