@@ -1348,7 +1348,7 @@ export function renderRepoLlmsTxt() {
     '- `docs/BOT_API.md` — every bot route',
     '- `docs/IDENTITY.md` — person, emails, passkeys, vote PIN',
     '- `apps/node` — Express API and vanilla JS pages',
-    '- `smart-contracts/` — ZkVotingRollup, the one L1 contract',
+    '- `../smart-contracts/` (repository root) — ZkVotingRollup, the one L1 contract',
     '- `circuits/` — vote, tally, identity',
     '- `l2/rollup/` — L2 operator that batches civic-vote ballots for ZkVotingRollup',
     '',

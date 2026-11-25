@@ -33,6 +33,25 @@ function escapeAttr(value) {
     .replace(/>/g, '&gt;');
 }
 
+/**
+ * A client host's own contact line and, when switched on, its contracting offer
+ * (SITE_CONTACT_EMAIL / SITE_CONTRACTING_CTA or /setup; src/siteIdentity.mjs). Nothing
+ * when no contact is set: a client site never shows the upstream project's inbox.
+ */
+function clientContact({ contactEmail = '', contractingCta = false } = {}) {
+  if (!contactEmail) return '';
+  const mail = escapeAttr(contactEmail);
+  let html =
+    '<p class="footer-contact-line"><span class="footer-kicker" data-i18n="chrome.footerContact">Contact</span> ' +
+    `<a class="footer-mail" href="mailto:${mail}">${mail}</a></p>`;
+  if (contractingCta) {
+    html +=
+      '<p class="footer-contract"><span data-i18n="chrome.footerContract">We are available for contracting for your local implementation.</span> ' +
+      `<a class="btn footer-cta" href="mailto:${mail}" data-i18n="chrome.footerContractCta">Email us</a></p>`;
+  }
+  return html;
+}
+
 /** The discreet credit on a client host. `projectUrl` "" (SITE_PROJECT_URL=none) drops it. */
 function poweredBy(projectUrl = 'https://zk-voting.org') {
   if (!projectUrl) return '';
@@ -92,7 +111,7 @@ export function applyClientHostHtml(html, clientBrand) {
     const withClass = /\bsite-footer-client\b/.test(attrs)
       ? attrs
       : attrs.replace(/\bclass="([^"]*)"/, 'class="$1 site-footer-client"');
-    return `<footer${withClass}>${poweredBy(clientBrand.projectUrl)}</footer>`;
+    return `<footer${withClass}>${clientContact(clientBrand)}${poweredBy(clientBrand.projectUrl)}</footer>`;
   });
   out = out.replace(/\sdata-i18n="chrome\.titleHome"/g, '');
   out = out.replace(/\sdata-i18n-content="chrome\.metaDescription"/g, '');
@@ -136,12 +155,12 @@ export function applyHeaderLogo(html, logoUrl) {
   );
 }
 
-export function renderPublicHtml(html, { voteFqdn = '', assetVersion: version = '', clientBrand = null, logoUrl = '', projectUrl } = {}) {
+export function renderPublicHtml(html, { voteFqdn = '', assetVersion: version = '', clientBrand = null, logoUrl = '', projectUrl, contactEmail = '', contractingCta = false } = {}) {
   let out = String(html || '');
   if (String(voteFqdn || '').trim()) {
     out = stripNamedHostDemo(out);
     const brand = clientBrand?.active ? clientBrand : { active: true };
-    out = applyClientHostHtml(out, projectUrl === undefined ? brand : { ...brand, projectUrl });
+    out = applyClientHostHtml(out, { ...brand, ...(projectUrl === undefined ? {} : { projectUrl }), contactEmail, contractingCta });
   }
   const mark = logoUrl || (clientBrand?.active ? clientBrand.logoUrl : '');
   if (mark) out = applyHeaderLogo(out, mark);

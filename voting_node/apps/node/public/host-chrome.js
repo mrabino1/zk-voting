@@ -59,7 +59,10 @@ export function paintClientHost(doc, config) {
   // The server writes this site's project link (SITE_PROJECT_URL, "" when hidden).
   const projectMeta = doc.querySelector('meta[name="site-project-url"]');
   const projectUrl = projectMeta ? projectMeta.getAttribute("content") || "" : "https://zk-voting.org";
-  if (footer && !footer.querySelector(".powered-by") && !projectUrl) {
+  // The server already wrote this site's footer (contact, offer, powered-by): keep it.
+  if (footer && footer.classList.contains("site-footer-client")) {
+    /* server-rendered client footer */
+  } else if (footer && !footer.querySelector(".powered-by") && !projectUrl) {
     footer.classList.add("site-footer-client");
     footer.textContent = "";
   } else if (footer && !footer.querySelector(".powered-by")) {

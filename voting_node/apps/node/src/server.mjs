@@ -283,6 +283,8 @@ function spaFallback(config, layoutService, store) {
             clientBrand: config.clientBrand,
             logoUrl: branding.logoUrl,
             projectUrl: identity ? identity.projectUrl : undefined,
+            contactEmail: identity ? identity.contactEmail : '',
+            contractingCta: identity ? identity.contractingCta : false,
           })),
           (err) => next(err),
         );

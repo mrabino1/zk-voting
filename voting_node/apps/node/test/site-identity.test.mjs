@@ -127,3 +127,23 @@ describe('served pages', () => {
     assert.equal(body.site.identity.forumUrl, 'https://forum.city.example');
   });
 });
+
+describe('client host footer (VOTE_FQDN set)', () => {
+  test('keeps the site\'s own contact and offer next to powered-by', async () => {
+    const { renderPublicHtml } = await import('../src/publicAssets.mjs');
+    const html = await readFile(path.join(here, '../public/index.html'), 'utf8');
+    const out = renderPublicHtml(html, { voteFqdn: 'demo.example.org', projectUrl: 'https://zk-voting.org', contactEmail: 'hello@city.example', contractingCta: true });
+    const footer = out.match(/<footer[\s\S]*?<\/footer>/)[0];
+    assert.match(footer, /mailto:hello@city\.example/);
+    assert.match(footer, /class="footer-contract"/);
+    assert.match(footer, /powered by zk-voting\.org/);
+  });
+
+  test('without a contact it shows only powered-by, never the upstream inbox', async () => {
+    const { renderPublicHtml } = await import('../src/publicAssets.mjs');
+    const html = await readFile(path.join(here, '../public/index.html'), 'utf8');
+    const footer = renderPublicHtml(html, { voteFqdn: 'demo.example.org', projectUrl: 'https://zk-voting.org' }).match(/<footer[\s\S]*?<\/footer>/)[0];
+    assert.doesNotMatch(footer, /mailto:/);
+    assert.match(footer, /powered by/);
+  });
+});
