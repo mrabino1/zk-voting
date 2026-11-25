@@ -7,7 +7,15 @@ A zero-knowledge, Ethereum-settled voting and polling system that anyone can sel
 - **Civic votes** settle on **ZkVotingRollup**, one Ethereum L1 contract shared by every jurisdiction. Ballots are encrypted in the voter's browser; an L2 operator batches them; after the cutoff, k-of-n guardians decrypt **only the final sum**, and L1 checks it. No single ballot is ever decrypted. Design: [`smart-contracts/docs/ROLLUP.md`](./smart-contracts/docs/ROLLUP.md).
 - **Polls** run on your own Node: ranked choice (IRV), interim results, ERC-20 token polls. Their privacy is weaker than a civic vote's, and the app says so.
 
-## Quick start: clone and launch
+## Quick start: fork and deploy on Coolify (no settings to type)
+
+1. Fork this repository on GitHub.
+2. In [Coolify](https://coolify.io): **+ New → Public Repository** → your fork → build pack **Docker Compose**, Base Directory `/voting_node`, Docker Compose Location `/docker-compose.coolify.yml` → **Deploy**.
+3. Give the `node` service your https domain, open it, and follow the setup screen: claim the site with the setup token Coolify generated (`SERVICE_PASSWORD_SETUP`), then choose how civic votes are counted (polls only, a free built-in test chain, or a public Ethereum network, whose chain id and shared contract address are filled in for you).
+
+Coolify generates the database password and setup token; the app generates its other secrets and derives its address from Coolify's domain. Guide: [Coolify](./voting_node/docs/self-hosting/coolify.md).
+
+## Quick start: clone and launch on your own server
 
 ```bash
 git clone https://github.com/mrabino1/zk-voting.git

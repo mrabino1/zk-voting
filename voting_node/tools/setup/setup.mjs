@@ -664,7 +664,12 @@ export function launchPlan({ deploy, next }) {
 function printLaunch(p, { deploy, next }) {
   const plan = launchPlan({ deploy, next });
   if (plan.coolify) {
-    p.say('Launch on Coolify:');
+    p.say('Simplest: skip all of this. Deploy /docker-compose.coolify.yml instead of /docker-compose.yml:');
+    p.say('  Coolify generates the database password and setup token, and the browser setup screen does');
+    p.say('  the rest (docs/self-hosting/coolify.md). Use the settings below only if you want every value');
+    p.say('  fixed in Coolify\'s environment.');
+    p.say('');
+    p.say('Launch on Coolify with these settings:');
     for (const line of plan.coolify) p.say(`  - ${line}`);
     p.say('  - Environment Variables (plain):');
     for (const line of plan.envPlain) p.say(`      ${line}`);

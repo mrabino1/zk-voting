@@ -2,15 +2,45 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-Every setting is an environment variable read when the process starts. Run `./setup.sh` to write `.env` from a few questions (see [First launch](./first-launch.md)), or copy `.env.example` to `.env` and edit it; Compose interpolates it. Environment variables always win over values an officer saves in the app at `/office/site`.
+Every setting is an environment variable read when the process starts. **With
+[Coolify and `docker-compose.coolify.yml`](./coolify.md) you do not need to set any of them:**
+the platform and the setup screen fill them in (below). Otherwise run `./setup.sh` to write
+`.env` from a few questions (see [First launch](./first-launch.md)), or copy `.env.example` to
+`.env` and edit it; Compose interpolates it.
 
 Never commit `.env`, and never bake secrets into an image.
 
+> Under plain Docker Compose a variable reaches a container only if the Compose file lists it
+> under that service's `environment:`. A line in `.env` for a variable the file does not list
+> has no effect.
+
 ## Precedence
 
-1. Environment variable (Compose `.env`, Coolify / Dokploy UI).
-2. Value saved in the app (`/office/site`), where that setting is editable there.
-3. Built-in default.
+1. Environment variable you set (Compose `.env`, Coolify / Dokploy UI).
+2. Filled automatically at start-up (next section): from the hosting platform, or from what
+   the setup screen saved on the `install` volume.
+3. Value saved in the app, where a setting is editable there. Exception: the product name,
+   short name and tagline saved in Site admin > Appearance win over `BRAND_*`.
+4. Built-in default.
+
+## Filled automatically
+
+When a variable is empty, the node and the L2 operator fill it at start-up and log the names
+they filled (never the values). A variable you set always wins.
+
+| Variable | Filled from | Notes |
+| --- | --- | --- |
+| `VOTE_FQDN` | `COOLIFY_FQDN` (first host) | Coolify injects it into a service that has a domain. |
+| `PUBLIC_BASE_URL` | `COOLIFY_URL` (first URL) | Keeps Coolify's scheme, so a plain-http test domain is not advertised as https. |
+| `TRUST_PROXY` | `1` when Coolify is detected | Coolify always routes through its proxy. |
+| `DATABASE_URL` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST` (default `db`), `POSTGRES_PORT` (default `5432`) | Values are URL-encoded. |
+| `L2_BALLOT_TOKEN` | `$INSTALL_DIR/l2-ballot-token` | Generated once by whichever of node and l2 starts first. |
+| `L1_RPC`, `L1_CHAIN_ID`, `ROLLUP_ADDRESS`, `ROLLUP_DEPLOYMENT_FILE`, `ROLLUP_JURISDICTION_ID`, `ROLLUP_DEPLOY_BLOCK`, `ROLLUP_PRIVATE_KEY`, `OPERATOR_PRIVATE_KEY`, `ZK_VOTING_ALLOW_MOCK_PROOFS` | `$INSTALL_DIR/voting.json` and the key files next to it | Written by `/setup`, "How civic votes are counted". Built-in test chain: the local Anvil chain and its public test keys (refused on any other chain). Public network: the address from [`networks.json`](../../packages/chain-client/networks.json) and keys generated on the server. |
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `INSTALL_DIR` | empty (`/install` in `docker-compose.coolify.yml`) | A directory shared by the node and l2 containers (mode 700, owned by the app user). Holds the shared ballot token, the setup screen's voting choice and any keys it generated. Empty: nothing is filled from it and `/setup` cannot change how civic votes are counted. **Back it up**: it holds this site's Ethereum keys. |
+| `POSTGRES_HOST`, `POSTGRES_PORT` | `db`, `5432` | Only used to build `DATABASE_URL` when it is empty. |
 
 ## Host and URLs
 

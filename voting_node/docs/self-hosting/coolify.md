@@ -2,79 +2,126 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-[Coolify](https://coolify.io) is an open-source, self-hosted PaaS. It builds the repository's Compose file, issues TLS certificates, and runs rolling updates. This is the recommended managed path.
+[Coolify](https://coolify.io) is an open-source, self-hosted PaaS. It builds this repository's
+Compose file, issues TLS certificates and runs updates. It is the recommended way to run your
+own fork: **you do not need to type any settings before the first deploy.** Coolify generates
+the database password and the setup token, gives the site an address, and the rest is chosen in
+your browser on the setup screen.
 
-## 1. Create the resource
+## 1. Fork the repository
 
-1. In Coolify, open your project and choose **+ New → Public Repository** (or **Private Repository** with a GitHub App or deploy key for a private fork).
-2. Repository: your fork of `zk-voting`. Branch: `master` for production, `test/unstable` for staging. See [Upgrading](./upgrading.md#release-channels).
+On GitHub, fork `zk-voting`. Your fork is your site: its name, pages and settings are yours,
+and you can [take upstream updates](./forking.md) whenever you like.
+
+## 2. Create the resource in Coolify
+
+1. In your Coolify project choose **+ New → Public Repository** (or **Private Repository** with
+   the GitHub App for a private fork).
+2. Repository: your fork. Branch: `master` (production) or `test/unstable` (staging), see
+   [Upgrading](./upgrading.md#release-channels).
 3. Build pack: **Docker Compose**.
-4. Base Directory: `/voting_node`. Docker Compose Location: `/docker-compose.yml` (this path is relative to the base directory), or `/docker-compose.tailscale.yml` if you also want the [Tailscale sidecar](./tailscale.md). The Node image is `Dockerfile` in that directory; the L2 image is `l2/Dockerfile`. Watch paths, if you set them, are `voting_node/**`.
+4. **Base Directory:** `/voting_node`
+5. **Docker Compose Location:** `/docker-compose.coolify.yml`
+6. Click **Deploy**. The first build takes several minutes (it builds the app, the L2 operator
+   and compiles the smart contracts for the built-in test chain).
 
-Coolify reads every `${VAR}` and `${VAR:-default}` in the Compose file and shows it as an editable variable. A `${VAR:?}` (used by the Tailscale file for `TS_AUTHKEY`) is required: the deploy will not start until you set it.
+That is all. Coolify creates these for you and keeps them across redeploys; you can see them
+under the resource's **Environment Variables**:
 
-## 2. Domain
+| Variable | What it is |
+| --- | --- |
+| `SERVICE_USER_POSTGRES`, `SERVICE_PASSWORD_POSTGRES` | The database account. The app builds its connection from them. |
+| `SERVICE_PASSWORD_SETUP` | The **setup token**. You type it once on the setup screen to prove you own this deployment. |
+| `SERVICE_FQDN_NODE` | The site's address (see the next step). |
 
-In the resource, open the `node` service and set **Domains** to:
+The app generates the rest itself on first boot (the key the app and the L2 operator share, the
+receipt-signing key) and keeps them on its own volumes.
 
-```text
-https://vote.example.org:3000
-```
+## 3. Give it your address
 
-The `:3000` tells Coolify's proxy which container port to route to; visitors still use port 443. Then set the matching environment variable:
+Coolify assigns a temporary address to the `node` service, often a plain `http://…sslip.io`
+one. **Passkeys, which voters and officials sign in with, only work over https**, and they are
+bound to the address they were created on. So before anyone registers:
 
-```env
-VOTE_FQDN=vote.example.org
-TRUST_PROXY=1
-```
+1. Point a DNS name at your Coolify server (for example `vote.example.org`).
+2. In the resource, open the **node** service and set **Domains** to `https://vote.example.org`.
+3. Redeploy. Coolify gets the certificate; the app picks the address up by itself
+   (`COOLIFY_FQDN` / `COOLIFY_URL`), so there is nothing else to change.
 
-Leave the `l2` service without a domain. It only needs to be reachable on the Compose network.
+The setup screen warns you while the site is still on plain http.
 
-Coolify's proxy publishes the site. The `ports:` entries in `docker-compose.yml` additionally publish 3000 and 8546 on the host for plain-Compose users. On a public Coolify host, firewall those ports or remove them in your fork, because published ports bypass the proxy.
+## 4. Open the site and follow the setup screen
 
-## 3. Environment
+Open your address. While the site has no administrator, every page leads to **/setup**:
 
-Shortcut: on any machine with a clone, run `./setup.sh --deploy coolify`. It asks the setup questions (super admin, chain id, ceremony, entropy, hostname, database, rollup) and prints the Coolify settings: the plain variables with their values, and the secret ones (`SETUP_TOKEN`, `ZK_ENTROPY`, `DATABASE_URL`, `RECEIPT_PDF_SECRET`, `ROLLUP_PRIVATE_KEY`, `OPERATOR_PRIVATE_KEY`, `L2_BALLOT_TOKEN`, `L1_RPC`) by name only. When `L1_RPC_AUTH_TOKEN` is set, it is listed the same way: an optional bearer token for an L1 RPC that requires auth. Leave it empty when the endpoint does not. Copy each secret value from the `voting_node/.env` it wrote and mark it secret in Coolify.
+1. **Claim the site.** Choose your handle, paste the setup token (`SERVICE_PASSWORD_SETUP`
+   from step 2), accept the Terms and create a passkey. You are now the super administrator;
+   this step closes for good.
+2. **Chain id, entropy.** Defaults are fine; each step explains its choice.
+3. **Website address.** Shows the address and database the site is running with and where
+   each came from.
+4. **How civic votes are counted.**
+   - **Polls only**: no blockchain, nothing to pay.
+   - **Built-in test chain**: free practice civic votes on a private Ethereum test chain that
+     runs inside this deployment. Choose this to learn the system.
+   - **A public Ethereum network**: choose the network from the list (the chain id and the
+     shared contract address are filled in for you), paste an RPC address, and fund the two
+     accounts the screen shows. Public networks become selectable once the shared contract is
+     deployed there; until then the screen says why.
 
-Set at least these in **Environment Variables**:
+   Saving restarts the app and the L2 operator to apply it; the page reconnects by itself.
+5. **Finish.**
+
+Then add your jurisdiction and officers from `/admin` and create your first election from the
+admin hub (`/office`). See [First launch](./first-launch.md) for what each step stores.
+
+## Email (optional)
+
+Sign-in codes, receipts and official outcome PDFs are sent with Amazon SES. Without it the site
+works, but nothing is emailed. To turn it on, set `SES_FROM_ADDRESS` and `AWS_REGION` (plus
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` unless the server has an IAM role) under
+Environment Variables and redeploy. Do this **after** you have claimed the site: once email is
+configured, every sign-in, including the first administrator's, needs an email code.
+
+## Changing settings later
+
+Every setting the setup screen chose can be overridden in Coolify's Environment Variables; a
+value set there always wins and the setup screen shows it as fixed. The full list is in the
+[Configuration reference](./configuration.md). Commonly used:
 
 | Variable | Example | Why |
 | --- | --- | --- |
-| `POSTGRES_USER` | `zkvote` | Role for the bundled Postgres. Required. |
-| `POSTGRES_PASSWORD` | a long secret | Password for that role. Required. No default is shipped. Mark it secret. |
-| `POSTGRES_DB` | `zkvote` | Database name. Required. |
-| `DATABASE_URL` | `postgres://zkvote:…@db:5432/zkvote` | Same role, password, and database. Host name is `db`. Required. Mark it secret. |
-| `VOTE_FQDN` | `vote.example.org` | Passkeys, allowed origin, PDF links. |
 | `SUPER_ADMIN_EMAIL` | `clerk@example.org` | Where `/feedback` and the first admin's mail go. |
-| `IS_DEMO` | omit, or `false` | Set `true` only on the public demo. A missing or empty value is a real election and does not schedule the monthly soft-delete. |
-| `L2_BALLOT_TOKEN` | 64 hex chars | Node → operator ballot token. Required. Mark it secret. |
-| `RECEIPT_PDF_SECRET` | 64 hex chars | Stable key for locked receipt and outcome PDFs. |
-| `SES_FROM_ADDRESS`, `AWS_REGION` | `vote@example.org`, `us-east-1` | Email MFA. Leave empty for a demo. |
+| `BRAND_NAME` | `Springfield Votes` | Default product name (Site admin > Appearance wins). |
+| `VOTE_FQDN` | `vote.example.org` | Pin the address instead of following Coolify's domain. |
+| `IS_DEMO` | `true` | Only on a disposable public demo (monthly soft-delete). |
 
-Coolify can generate secrets for you: in your fork, use a magic variable such as `${SERVICE_HEX_32_BALLOT}` as the default for `L2_BALLOT_TOKEN`. Full list: [Configuration reference](./configuration.md).
+## Health checks
 
-## 4. Health checks
+The Compose file defines health checks for `node` and `l2`. If you also enable Coolify's own
+HTTP health check, use path `/health`, port `3000`, success HTTP 200, on the **node** service.
+Do not require `"mode":"active"`: a new container starts in standby during a rolling update.
 
-The Compose file already defines health checks for `node` and `l2` (a Node.js `fetch` of `/health`), and Coolify uses them. If you also enable Coolify's own HTTP health check, use:
+Until you choose how civic votes are counted, the `l2` service waits in **standby**
+(`/health` answers 200 with `"status":"standby"`); that is expected and does not keep the site
+down. The one-shot `l1-deploy` service exits after deploying the test-chain contract; Coolify
+leaves it out of the resource's health status.
 
-| Setting | Value |
-| --- | --- |
-| Path | `/health` |
-| Port | `3000` |
-| Success | HTTP 200 |
+## Updates and backups
 
-Do **not** require `"mode":"active"`. A new container starts in standby during a rolling update and would never pass. See [Rolling updates](./rolling-updates.md).
+Enable **Auto Deploy** on the branch, or click **Redeploy**. The volumes `postgres-data` (all
+app data), `node-data`, `l2-data`, `install` (the setup screen's choices and the keys it
+generated) and `l1-data` persist across deploys. **Back up `postgres-data` and `install`**: the
+second holds this site's Ethereum keys. Read [Upgrading](./upgrading.md) and
+[Backups](./backups.md) first.
 
-`dependency failed to start: container l2-... is unhealthy` means the rollup operator never answered `GET /health` on port 8546. The node waits for it, so it does not start either. Leave Coolify's own HTTP check on the **node** service (path `/health`, port 3000). Do not point it at `l2`. After a failed deploy, the l2 container log is the next place to look. With `L2_ALLOW_DEGRADED` left empty, a missing `OPERATOR_PRIVATE_KEY`, an L1 RPC on the wrong chain, or a test key on a public chain still exits the process at start. Set `L2_ALLOW_DEGRADED=1` to keep the operator up in degraded mode (`/health` stays HTTP 200 with `"status": "degraded"`) while that is being fixed. It does not submit batches until init succeeds.
+## Running without the one-click file
 
-## 5. Deploy
+`docker-compose.yml` is the hand-configured variant (every secret in `.env`, written by
+`./setup.sh`). With Coolify, `./setup.sh --deploy coolify` prints the settings for it. Use it
+when you want every value under your own control; the setup screen then shows them as fixed by
+the environment.
 
-Click **Deploy**. Watch the build log, then open `https://vote.example.org/health`. Continue with [First launch](./first-launch.md).
-
-## Updates
-
-Enable **Auto Deploy** on the branch, or click **Redeploy** after pulling. Volumes `node-data` and `l2-data` persist across deploys. Read [Upgrading](./upgrading.md) and take a [backup](./backups.md) first.
-
-## Files from the repository
-
-If you mount a file from the repository into a container (for example a custom Tailscale serve config), enable **Preserve Repository During Deployment**, or inline the file in Compose. The bundled `docker-compose.tailscale.yml` writes its serve config at start-up, so it needs neither.
+If you mount a file from the repository into a container yourself, enable **Preserve Repository
+During Deployment**. `docker-compose.coolify.yml` does not need it: the contracts are compiled
+into the `l1-deploy` image at build time.
