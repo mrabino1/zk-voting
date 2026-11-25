@@ -45,6 +45,8 @@ services:
       PORT: "3000"
       DATA_DIR: /data
       INSTALL_DIR: /install
+      # Saving on /setup restarts the process; restart: unless-stopped brings it back.
+      RESTART_ON_SETUP: "1"
       # The node builds DATABASE_URL from these (host "db").
       POSTGRES_USER: ${SERVICE_USER_POSTGRES}
       POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
@@ -81,6 +83,9 @@ services:
       ROLLUP_JURISDICTION_ID: ${ROLLUP_JURISDICTION_ID:-}
       ROLLUP_PRIVATE_KEY: ${ROLLUP_PRIVATE_KEY:-}
       ROLLUP_DEPLOY_BLOCK: ${ROLLUP_DEPLOY_BLOCK:-}
+      # Whether OPERATOR_PRIVATE_KEY is set for l2 ("1" or empty), so /setup leaves the
+      # rollup settings alone. The key itself stays in the l2 container.
+      OPERATOR_PRIVATE_KEY_SET: ${OPERATOR_PRIVATE_KEY:+1}
       L2_URL: http://l2:8546
     volumes:
       - node-data:/data

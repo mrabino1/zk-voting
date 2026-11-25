@@ -9,6 +9,8 @@
 // and our docker-compose.coolify.yml passes the Postgres role, password and database that
 // Coolify generated (SERVICE_USER_POSTGRES / SERVICE_PASSWORD_POSTGRES).
 
+import { normalizeVoteFqdn } from './config.mjs';
+
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
 
 function firstOf(list) {
@@ -33,13 +35,18 @@ export function platformEnv(env = process.env) {
   };
 
   const coolifyUrl = firstOf(env.COOLIFY_URL);
-  const coolifyHost = firstOf(env.COOLIFY_FQDN) || (coolifyUrl ? safeHost(coolifyUrl) : '');
+  const coolifyHost = usableHost(firstOf(env.COOLIFY_FQDN) || coolifyUrl);
   if (coolifyHost) {
-    fill('VOTE_FQDN', coolifyHost, 'Coolify domain (COOLIFY_FQDN)');
-    // Keep the scheme Coolify reports: an http:// test domain must not be advertised as https.
-    fill('PUBLIC_BASE_URL', coolifyUrl || `https://${coolifyHost}`, 'Coolify domain (COOLIFY_URL)');
     // Coolify always routes through its reverse proxy (Traefik or Caddy): one hop.
     fill('TRUST_PROXY', '1', 'Coolify reverse proxy');
+    // The public URL follows Coolify only when the host name does. An operator who pins
+    // VOTE_FQDN gets https://VOTE_FQDN (config.mjs), not Coolify's generated domain.
+    if (isBlank(out.VOTE_FQDN)) {
+      fill('VOTE_FQDN', coolifyHost, 'Coolify domain (COOLIFY_FQDN)');
+      // Keep the scheme Coolify reports: an http:// test domain must not be advertised as https.
+      const scheme = /^http:\/\//i.test(coolifyUrl) ? 'http' : 'https';
+      fill('PUBLIC_BASE_URL', `${scheme}://${coolifyHost}`, 'Coolify domain (COOLIFY_URL)');
+    }
   }
 
   if (isBlank(env.DATABASE_URL) && !isBlank(env.POSTGRES_USER) && !isBlank(env.POSTGRES_PASSWORD) && !isBlank(env.POSTGRES_DB)) {
@@ -51,6 +58,27 @@ export function platformEnv(env = process.env) {
     fill('DATABASE_URL', url, 'POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB');
   }
   return { env: out, derived };
+}
+
+/**
+ * A host name the node accepts as VOTE_FQDN, from "host", "host:port" or "scheme://host[:port]/…".
+ * Anything else (a bare IP, garbage) gives "" so a surprising platform value cannot keep the
+ * node from starting.
+ */
+function usableHost(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  let host = '';
+  try {
+    host = new URL(raw.includes('://') ? raw : `https://${raw}`).hostname;
+  } catch {
+    return '';
+  }
+  try {
+    return normalizeVoteFqdn(host);
+  } catch {
+    return '';
+  }
 }
 
 function safeHost(url) {

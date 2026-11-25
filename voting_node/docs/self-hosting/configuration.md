@@ -41,6 +41,8 @@ they filled (never the values). A variable you set always wins.
 | --- | --- | --- |
 | `INSTALL_DIR` | empty (`/install` in `docker-compose.coolify.yml`) | A directory shared by the node and l2 containers (mode 700, owned by the app user). Holds the shared ballot token, the setup screen's voting choice and any keys it generated. Empty: nothing is filled from it and `/setup` cannot change how civic votes are counted. **Back it up**: it holds this site's Ethereum keys. |
 | `POSTGRES_HOST`, `POSTGRES_PORT` | `db`, `5432` | Only used to build `DATABASE_URL` when it is empty. |
+| `RESTART_ON_SETUP` | empty (`1` in `docker-compose.coolify.yml`) | `1`: after `/setup` saves how civic votes are counted, the node restarts itself (the container's restart policy brings it back). Leave empty where nothing restarts the process (`npm start`); the setup screen then asks you to restart. |
+| `OPERATOR_PRIVATE_KEY_SET` | set by `docker-compose.coolify.yml` | Tells the node that `OPERATOR_PRIVATE_KEY` is set for l2 (never the key), so `/setup` leaves the rollup settings alone. |
 
 ## Host and URLs
 

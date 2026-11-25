@@ -25,7 +25,16 @@ import { settingSource } from './platformEnv.mjs';
 const install = createRequire(import.meta.url)('@zk-voting/chain-client/install');
 
 /** Settings that decide where civic votes settle. If the operator typed any, setup leaves them alone. */
-export const ROLLUP_ENV = Object.freeze(['L1_RPC', 'ROLLUP_ADDRESS', 'ROLLUP_DEPLOYMENT_FILE', 'ROLLUP_PRIVATE_KEY', 'OPERATOR_PRIVATE_KEY']);
+export const ROLLUP_ENV = Object.freeze([
+  'L1_RPC',
+  'L1_CHAIN_ID',
+  'ROLLUP_ADDRESS',
+  'ROLLUP_DEPLOYMENT_FILE',
+  'ROLLUP_JURISDICTION_ID',
+  'ROLLUP_DEPLOY_BLOCK',
+  'ROLLUP_PRIVATE_KEY',
+  'OPERATOR_PRIVATE_KEY',
+]);
 
 function addressOf(key) {
   try {
@@ -55,7 +64,13 @@ export function networksForSetup() {
 
 /** Names of rollup settings the operator fixed in the environment (not filled by setup). */
 export function envLockedRollupSettings(env = process.env) {
-  return ROLLUP_ENV.filter((name) => settingSource(name, env) === 'environment');
+  const locked = ROLLUP_ENV.filter((name) => settingSource(name, env) === 'environment');
+  // The operator key lives in the l2 container only; docker-compose.coolify.yml tells the
+  // node whether it is set (OPERATOR_PRIVATE_KEY_SET), never its value.
+  if (!locked.includes('OPERATOR_PRIVATE_KEY') && /^(1|true)$/i.test(String(env.OPERATOR_PRIVATE_KEY_SET || '').trim())) {
+    locked.push('OPERATOR_PRIVATE_KEY');
+  }
+  return locked;
 }
 
 /** Elections already published to L1 under the current settings. Changing the mode would strand them. */
@@ -119,9 +134,13 @@ export async function rpcChainId(url, { fetchImpl = fetch, timeoutMs = 8000 } = 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
     signal: AbortSignal.timeout(timeoutMs),
+    redirect: 'error',
   });
   if (!res.ok) throw new Error(`the RPC answered HTTP ${res.status}`);
-  const body = await res.json();
+  // Never echo the response body: the address is typed by a person and could point anywhere.
+  const body = await res.json().catch(() => {
+    throw new Error('the address did not answer like an Ethereum RPC');
+  });
   if (!body || typeof body.result !== 'string') throw new Error('the RPC did not return a chain id');
   return Number(BigInt(body.result));
 }
@@ -134,7 +153,7 @@ function validRpcUrl(raw) {
   } catch {
     return null;
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+  if (url.protocol !== 'https:' || url.username || url.password) return null;
   return value;
 }
 

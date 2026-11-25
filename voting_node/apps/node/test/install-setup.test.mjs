@@ -180,3 +180,40 @@ describe('saveVotingMode', () => {
     assert.equal(redactRpc('https://rpc.example?key=abc'), 'https://rpc.example/?…');
   });
 });
+
+describe('review fixes', () => {
+  test('a pinned VOTE_FQDN keeps its own https public URL, not Coolify\'s test domain', () => {
+    const { env, derived } = platformEnv({ COOLIFY_FQDN: 'abc.sslip.io', COOLIFY_URL: 'http://abc.sslip.io', VOTE_FQDN: 'vote.city.org' });
+    assert.equal(env.PUBLIC_BASE_URL, undefined);
+    assert.equal(derived.PUBLIC_BASE_URL, undefined);
+  });
+
+  test('an unusable Coolify domain is skipped instead of failing start-up', () => {
+    assert.equal(platformEnv({ COOLIFY_FQDN: '10.0.0.5' }).env.VOTE_FQDN, undefined);
+    assert.equal(platformEnv({ COOLIFY_FQDN: 'https://vote.example.org:443/x' }).env.VOTE_FQDN, 'vote.example.org');
+  });
+
+  test('the test chain never waives poll eligibility proofs on the node', () => {
+    const sub = path.join(dir, 'roles');
+    install.writeVotingConfig(sub, { mode: 'local-test' });
+    assert.equal(install.installEnv({ INSTALL_DIR: sub }, { role: 'node' }).env.ZK_VOTING_ALLOW_MOCK_PROOFS, undefined);
+    assert.equal(install.installEnv({ INSTALL_DIR: sub }, { role: 'l2' }).env.ZK_VOTING_ALLOW_MOCK_PROOFS, '1');
+  });
+
+  test('an operator key set for l2 locks the rollup choice', async () => {
+    await assert.rejects(
+      saveVotingMode({ installDir: path.join(dir, 'opk'), store: { listElections: () => [] } }, { mode: 'polls' }, { env: { OPERATOR_PRIVATE_KEY_SET: '1' } }),
+      (err) => err.extra.code === 'SETUP_ROLLUP_FIXED_BY_ENV' && err.extra.locked.includes('OPERATOR_PRIVATE_KEY'),
+    );
+  });
+
+  test('a leftover empty secret file does not wedge start-up', async () => {
+    const { writeFileSync } = await import('node:fs');
+    const sub = await mkdtemp(path.join(os.tmpdir(), 'zkv-empty-'));
+    writeFileSync(path.join(sub, install.INSTALL_FILES.ballotToken), '');
+    const token = install.sharedSecret(sub, install.INSTALL_FILES.ballotToken);
+    assert.match(token, /^[0-9a-f]{64}$/);
+    assert.equal(install.sharedSecret(sub, install.INSTALL_FILES.ballotToken), token);
+    await rm(sub, { recursive: true, force: true });
+  });
+});

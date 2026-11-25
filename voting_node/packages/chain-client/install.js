@@ -78,19 +78,25 @@ function sharedSecret(dir, name, make = () => crypto.randomBytes(32).toString('h
   if (existing) return existing;
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const value = make();
+  // Write a complete temp file, then link it into place. link() fails if the name exists,
+  // so the first writer wins, and a crash can never leave an empty secret behind.
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(tmp, `${value}\n`, { mode: 0o600 });
   try {
-    fs.writeFileSync(file, `${value}\n`, { mode: 0o600, flag: 'wx' });
+    fs.linkSync(tmp, file);
     return value;
   } catch (err) {
     if (err && err.code === 'EEXIST') {
-      // The other container won the race; it may still be writing.
-      for (let i = 0; i < 50; i++) {
-        const v = readText(file);
-        if (v) return v;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
-      }
+      const v = readText(file);
+      if (v) return v;
+      // Linked files are always complete, so an empty one is left over from a crash in an
+      // older release (or edited by hand). Replace it rather than refusing to start.
+      fs.renameSync(tmp, file);
+      return value;
     }
     throw err;
+  } finally {
+    fs.rmSync(tmp, { force: true });
   }
 }
 
@@ -161,7 +167,7 @@ function writeVotingConfig(dir, settings) {
  * each filled value. Never throws on a missing directory: an install without
  * INSTALL_DIR behaves exactly as before.
  */
-function installEnv(env = process.env) {
+function installEnv(env = process.env, { role = 'l2' } = {}) {
   const out = { ...env };
   const sources = {};
   const dir = installDir(env);
@@ -182,8 +188,9 @@ function installEnv(env = process.env) {
     fill('ROLLUP_DEPLOYMENT_FILE', LOCAL_TEST_CHAIN.deploymentFile);
     fill('ROLLUP_PRIVATE_KEY', LOCAL_TEST_CHAIN.nodeKey);
     fill('OPERATOR_PRIVATE_KEY', LOCAL_TEST_CHAIN.operatorKey);
-    // The batch validity circuit is not built; the mock path is accepted on 31337 only.
-    fill('ZK_VOTING_ALLOW_MOCK_PROOFS', '1');
+    // The batch validity circuit is not built; the l2 accepts the mock path on 31337 only.
+    // The node does not get it: there it would also waive the eligibility proof of polls.
+    if (role === 'l2') fill('ZK_VOTING_ALLOW_MOCK_PROOFS', '1');
   } else if (voting?.mode === 'shared') {
     fill('L1_RPC', voting.l1Rpc);
     fill('L1_CHAIN_ID', voting.chainId);
@@ -199,8 +206,8 @@ function installEnv(env = process.env) {
 }
 
 /** Fill process.env in place (start-up only). Returns the names it filled. */
-function applyInstallEnv(target = process.env) {
-  const { env, sources, mode } = installEnv(target);
+function applyInstallEnv(target = process.env, opts = {}) {
+  const { env, sources, mode } = installEnv(target, opts);
   for (const name of Object.keys(sources)) target[name] = env[name];
   return { filled: Object.keys(sources), mode };
 }
