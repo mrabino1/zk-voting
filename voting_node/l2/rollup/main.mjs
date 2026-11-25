@@ -37,6 +37,35 @@ import { allowDegraded, startOperator, redactOperatorLog } from './boot.mjs';
 import { redactL1RpcAuth } from '../l1RpcAuth.js';
 import { createApi, createStandbyApi } from './server.mjs';
 
+// Settings /setup saved on the shared install volume fill whatever the environment left
+// empty (an explicit variable always wins). See packages/chain-client/install.js.
+const install = createRequire(import.meta.url)('../../packages/chain-client/install.js');
+const installed = install.applyInstallEnv(process.env);
+if (installed.filled.length) {
+  console.log(`l2 settings from setup (env still wins): ${installed.filled.sort().join(', ')}`);
+}
+// When /setup changes the voting mode, restart so the new settings apply. The container's
+// restart policy brings the process straight back.
+{
+  const dir = install.installDir(process.env);
+  if (dir) {
+    const bootStamp = install.votingConfigStamp(dir);
+    const timer = setInterval(() => {
+      let now = bootStamp;
+      try {
+        now = install.votingConfigStamp(dir);
+      } catch {
+        return;
+      }
+      if (now !== bootStamp) {
+        console.log('l2: the voting mode changed on /setup; restarting to apply it');
+        process.exit(0);
+      }
+    }, 5_000);
+    timer.unref?.();
+  }
+}
+
 // First line before loading l1.mjs (viem): names only, never RPC/key/token values.
 {
   const has = (name) => (String(process.env[name] || '').trim() ? 'set' : 'unset');
@@ -152,7 +181,11 @@ if (allowDegraded(process.env)) {
     if (!standbyAllowed) refuse(reason);
     // Standby: liveness only. No Operator, no batch loop, no L1 writes.
     console.error(`L2 STANDBY (not ready): ${reason}`);
-    console.error('L2 STANDBY: no ballots are accepted and nothing is sent to L1. Fix the rollup settings and restart l2.');
+    console.error(
+      install.installDir(env)
+        ? 'L2 STANDBY: no ballots are accepted and nothing is sent to L1. Choose how civic votes are counted on the /setup page; l2 restarts by itself when you save.'
+        : 'L2 STANDBY: no ballots are accepted and nothing is sent to L1. Fix the rollup settings and restart l2.',
+    );
     createStandbyApi({ reason, chainId: Number.isFinite(chainId) ? chainId : null, rollup: env.ROLLUP_ADDRESS || null }).listen(
       port,
       host,

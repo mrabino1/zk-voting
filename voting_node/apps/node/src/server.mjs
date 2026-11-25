@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 import cors from 'cors';
 import express from 'express';
@@ -28,6 +29,9 @@ import { registerDemoPurgeSchedule } from './demoPurge.mjs';
 import { createPinService } from './pin.mjs';
 import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
+import { applyPlatformEnv, recordFilled } from './platformEnv.mjs';
+
+const { applyInstallEnv } = createRequire(import.meta.url)('@zk-voting/chain-client/install');
 import { isVoteElection, voteResultsSealed } from './electionType.mjs';
 import { loadReceiptPdfSecret } from './receipts.mjs';
 import { createVotePassService } from './votePass.mjs';
@@ -366,6 +370,17 @@ export async function createApp(overrides = {}) {
     votePass,
     tokenRegistry,
     writer,
+    // Shared install volume (/setup writes the voting mode there). Unset outside Compose.
+    installDir: overrides.installDir ?? (isTestEnv() ? '' : String(process.env.INSTALL_DIR || '').trim()),
+    // A settings change applies by restarting: SIGTERM runs the normal graceful shutdown
+    // and the container's restart policy starts a fresh process.
+    // Only under a supervisor that brings the process back (RESTART_ON_SETUP=1, set by
+    // docker-compose.coolify.yml); `npm start` would just stop.
+    requestRestart:
+      overrides.requestRestart ??
+      (!isTestEnv() && /^(1|true|yes|on)$/i.test(String(process.env.RESTART_ON_SETUP || '').trim())
+        ? () => setTimeout(() => process.kill(process.pid, 'SIGTERM'), 750).unref?.()
+        : null),
   };
   deps.ceremonies = createCeremonyService({
     config,
@@ -571,8 +586,22 @@ export async function startServer(overrides = {}) {
   };
 }
 
+function isTestEnv() {
+  return process.env.NODE_ENV === 'test';
+}
+
 const isMain = path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url);
 if (isMain) {
+  // Fill blanks a fresh fork cannot be expected to type: the domain and database from the
+  // hosting platform (Coolify), and what /setup saved on the shared install volume. An
+  // explicit environment variable always wins. See src/platformEnv.mjs and
+  // packages/chain-client/install.js.
+  const fromPlatform = applyPlatformEnv(process.env);
+  recordFilled(Object.keys(fromPlatform), 'platform');
+  const fromSetup = applyInstallEnv(process.env, { role: 'node' });
+  recordFilled(fromSetup.filled, 'setup');
+  const filled = [...Object.keys(fromPlatform), ...fromSetup.filled];
+  if (filled.length) console.log(`settings filled automatically (env still wins): ${filled.sort().join(', ')}`);
   startServer()
     .then((created) => {
       let stopping = false;

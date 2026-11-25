@@ -8,7 +8,9 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./abi/*": "./abi/*"
+    "./abi/*": "./abi/*",
+    "./install": "./install.js",
+    "./networks.json": "./networks.json"
   },
   "scripts": {
     "test": "node --test test/*.test.js"

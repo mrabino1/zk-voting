@@ -540,3 +540,124 @@ textarea.builder-body {
 #form-ru-guardian {
   margin-bottom: 1rem;
 }
+
+/* ---- Back office: one section at a time + "Elections at a glance" ---- */
+
+.local-nav a[aria-current="true"] {
+  font-weight: 700;
+  border-color: var(--gold);
+}
+
+.local-nav .count {
+  margin-left: 0.4rem;
+  min-width: 1.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.local-nav .bo-show-all {
+  margin-left: auto;
+}
+
+.overview-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.9rem;
+}
+
+.overview-filters [aria-pressed="true"] {
+  border-color: var(--gold);
+  font-weight: 700;
+}
+
+.overview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.overview-list > li.empty {
+  color: var(--muted);
+}
+
+.overview-item {
+  border: 1px solid var(--line);
+  border-left-width: 6px;
+  border-radius: var(--radius);
+  background: var(--paper);
+  padding: 0.85rem 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.overview-item[data-tone="urgent"] { border-left-color: var(--danger); }
+.overview-item[data-tone="action"] { border-left-color: var(--warn); }
+.overview-item[data-tone="wait"] { border-left-color: var(--line); }
+.overview-item[data-tone="done"] { border-left-color: var(--ok); }
+
+.overview-item .ov-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.75rem;
+}
+
+.overview-item h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.overview-item .ov-stage {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--cream-dark);
+  color: var(--ink);
+}
+
+.overview-item[data-tone="urgent"] .ov-stage { background: var(--danger-bg); color: var(--danger); }
+.overview-item[data-tone="action"] .ov-stage { background: var(--warn-bg); color: var(--warn); }
+.overview-item[data-tone="done"] .ov-stage { background: var(--ok-bg); color: var(--ok); }
+
+.overview-item .ov-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.overview-item .ov-next {
+  margin: 0;
+}
+
+.overview-item .ov-next strong {
+  margin-right: 0.35rem;
+}
+
+.overview-item .actions {
+  margin: 0;
+}
+
+#ru-actions .btn.recommended {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.flash .flash-hint {
+  display: block;
+  margin-top: 0.3rem;
+  font-weight: 400;
+}

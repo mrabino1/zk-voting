@@ -18,7 +18,11 @@ an administrator renames it.
 
 ## Quickstart
 
-You need Docker with Compose v2 (and Node.js 20+ once, for the setup script). Full guide:
+**One click on Coolify, nothing to type:** deploy your fork with Base Directory `/voting_node`
+and Docker Compose Location `/docker-compose.coolify.yml`, open the site, and follow `/setup`.
+Guide: [Coolify](./docs/self-hosting/coolify.md).
+
+**Your own server:** you need Docker with Compose v2 (and Node.js 20+ once, for the setup script). Full guide:
 [Docker Compose quickstart](./docs/self-hosting/docker-compose.md).
 
 ```bash

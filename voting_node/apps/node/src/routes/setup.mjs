@@ -54,6 +54,8 @@ import {
   unclaimedSuperAdmin,
 } from '../setup.mjs';
 import { appendSiteAudit } from '../siteAudit.mjs';
+import { saveVotingMode, votingSetupStatus } from '../votingSetup.mjs';
+import { insecurePublicUrl, settingSource } from '../platformEnv.mjs';
 import { requireAcceptedTerms } from '../terms.mjs';
 import {
   ENTROPY_MODES,
@@ -83,6 +85,17 @@ export function siteInfo({ config, layoutService }) {
     productNameDefault: brandDefaults().name,
     productNameSaved: Boolean(saved.productName),
     env: 'VOTE_FQDN, ZK_VOTING_PORT, TRUST_PROXY, DATABASE_URL, BRAND_NAME',
+    // Where each value came from: "environment" (typed by the operator), "platform"
+    // (derived from the hosting platform, e.g. Coolify's domain), or "unset".
+    sources: {
+      voteFqdn: settingSource('VOTE_FQDN'),
+      publicBaseUrl: settingSource('PUBLIC_BASE_URL'),
+      trustProxy: settingSource('TRUST_PROXY'),
+      database: settingSource('DATABASE_URL'),
+    },
+    publicBaseUrl: config.publicBaseUrl || null,
+    // Passkeys need HTTPS on any real host name. A Coolify test domain is often plain http.
+    insecureHttp: insecurePublicUrl(config.publicBaseUrl, config.voteFqdn),
   };
 }
 
@@ -300,6 +313,32 @@ export function setupRouter(deps) {
       setup.entropy = entropy;
       await store.persist();
       res.json(setupStatus(deps, req));
+    }),
+  );
+
+  // "How will civic votes be counted?" (src/votingSetup.mjs). Super admin only. Unlike
+  // the chain id, this stays changeable after setup finishes, until a civic vote is on L1.
+  router.get('/voting', requireSuperAdmin, (_req, res) => {
+    res.json({ nfp: true, ...votingSetupStatus(deps) });
+  });
+
+  router.put(
+    '/voting',
+    requireSuperAdmin,
+    asyncHandler(async (req, res) => {
+      const saved = await saveVotingMode(deps, req.body || {});
+      await appendSiteAudit(store, {
+        actor: req.user,
+        method: 'PUT',
+        path: '/api/setup/voting',
+        area: 'setup',
+        action: 'voting mode saved',
+        after: { mode: saved.mode, network: saved.network || null },
+      });
+      const restarting = typeof deps.requestRestart === 'function';
+      res.json({ nfp: true, saved: { mode: saved.mode, network: saved.network || null }, restarting, ...votingSetupStatus(deps) });
+      // The node and the l2 operator read these settings at start-up.
+      if (restarting) deps.requestRestart();
     }),
   );
 

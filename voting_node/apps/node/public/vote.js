@@ -33,6 +33,18 @@ import {
 
 import { ballotPath, voteBlockers, voteSteps } from "./vote-flow.js";
 import { t } from "./i18n.js";
+
+/** Why a ballot cannot be cast yet, in plain words, with the scheduled time. */
+function notOpenMessage(election, formatTime, now = Date.now() / 1000) {
+  const opens = formatTime(election.startTime);
+  if (election.state === 1) {
+    return `Voting opens ${opens}. The voter roll is final. You can read the questions now and come back then.`;
+  }
+  if (now < Number(election.startTime)) {
+    return `Voting opens ${opens}. Until then you can register and read the questions.`;
+  }
+  return `Voting was scheduled to open ${opens}, but the election office has not opened it yet. There is nothing you need to do; check back soon.`;
+}
 import { SEALED_RANKED_DISCLOSURE_KEY } from "./sealed-ranked-disclosure.js";
 
 function tallyEncryptionBlurb(election) {
@@ -670,12 +682,15 @@ export async function renderVote(main, ctx) {
         h(
           "div",
           { class: "notice notice-warn", role: "status" },
-          h("p", {
-            text:
-              election.state === 1
-                ? "The roll is frozen. Voting has not opened. You may review the questions."
-                : "This election is not open. Registration may still be available.",
-          })
+          h("p", { text: notOpenMessage(election, formatTime) }),
+          election.state === 0 && Date.now() / 1000 < Number(election.startTime)
+            ? h("a", {
+                class: "btn btn-secondary",
+                href: `/register?election=${encodeURIComponent(election.id)}`,
+                "data-nav": "",
+                text: "Register for this election",
+              })
+            : null
         )
       );
     }

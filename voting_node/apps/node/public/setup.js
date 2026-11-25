@@ -458,7 +458,7 @@ export async function renderSetup(main, ctx) {
                 text:
                   s.setupTokenSource === "generated"
                     ? "Printed once in the server log for this process. It is not shown here. A restart before you finish this step replaces it."
-                    : "The SETUP_TOKEN value from the server environment.",
+                    : "On Coolify: open this resource, go to Environment Variables and copy the value of SERVICE_PASSWORD_SETUP. On your own server: SETUP_TOKEN in voting_node/.env.",
               })
             )
           : null,
@@ -640,7 +640,7 @@ export async function renderSetup(main, ctx) {
         { class: "page-head" },
         h("p", { class: "kicker", text: "First run" }),
         h("h1", { text: "Set up this install" }),
-        h("p", { class: "lede", text: "Create the platform super admin, choose the chain, set up entropy, check the site settings and the L2 identity, then finish. ./setup.sh fills in most of this before the first launch. Each step can be re-run until you press Finish." })
+        h("p", { class: "lede", text: "A few steps and your site is ready: claim it as the first administrator, check its web address, and choose how civic votes are counted. Everything else has sensible defaults. You can redo any step until you press Finish." })
       ),
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,
       state.info ? h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })) : null,

@@ -114,12 +114,16 @@
 
   function errText(err) {
     const code = err.data && err.data.code;
-    return (
+    const technical =
       (err.status ? err.status + " · " : "") +
       (err.message || "Request failed") +
       (code ? " [" + code + "]" : "") +
-      (err.path ? " (" + err.path + ")" : "")
-    );
+      (err.path ? " (" + err.path + ")" : "");
+    // Contract reverts arrive as "L1 rejected the call: <ErrorName>"; say what that means.
+    const named = code || (/rejected the call: (\w+)/.exec(String(err.message || "")) || [])[1];
+    const helper = globalThis.ZkVotingNextStep;
+    const plain = helper && named ? helper.friendlyError(named) : "";
+    return plain ? plain + " — " + technical : technical;
   }
 
   function toUnix(datetimeLocal) {
@@ -1013,6 +1017,9 @@
       const me = await request("/api/me");
       const user = me.user;
       const role = user && user.role ? String(user.role) : "";
+      // The sign-in card is only useful to someone who is not signed in yet.
+      const signIn = $("sign-in-root");
+      if (signIn) signIn.hidden = Boolean(user);
       if (!user) {
         $("me-line").textContent = "Not signed in — the Node will still enforce roles on each action.";
       } else {
@@ -1120,10 +1127,209 @@
     else if (kind === "poll") await loadTallyElection(id);
   }
 
+  /** electionId -> row from the last /api/elections, for the overview and the next-step hints. */
+  const electionRows = new Map();
+  let overviewFilter = "todo";
+
+  function fmtWhen(ts) {
+    const n = Number(ts);
+    if (!Number.isFinite(n) || n <= 0) return "—";
+    return new Date(n * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  async function rollupViewFor(row) {
+    try {
+      return await request("/api/elections/" + encodeURIComponent(electionIdOf(row)) + "/rollup");
+    } catch (err) {
+      return { error: errText(err) };
+    }
+  }
+
+  async function renderOverview() {
+    const list = $("overview-list");
+    const helper = globalThis.ZkVotingNextStep;
+    if (!list || !helper) return;
+    const rows = [...electionRows.values()];
+    if (!rows.length) {
+      list.innerHTML =
+        '<li class="empty">No elections yet. <a href="#clerk" data-goto-section="clerk">Create the first one</a> in the clerk tools.</li>';
+      updateSectionBadge(0);
+      return;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const items = await Promise.all(
+      rows.map(async (row) => {
+        const view = isCivicVoteRow(row) ? await rollupViewFor(row) : null;
+        return { row, view, next: helper.nextStep(row, view, now) };
+      })
+    );
+    const rank = { urgent: 0, action: 1, wait: 2, done: 3 };
+    items.sort(
+      (a, b) =>
+        rank[a.next.tone] - rank[b.next.tone] || Number(a.row.startTime || 0) - Number(b.row.startTime || 0)
+    );
+    const todo = items.filter((it) => it.next.tone === "urgent" || it.next.tone === "action");
+    updateSectionBadge(todo.length);
+    const shown = overviewFilter === "todo" ? todo : items;
+    if (!shown.length) {
+      list.innerHTML =
+        '<li class="empty">Nothing needs action right now. ' +
+        '<button class="btn btn-secondary" type="button" data-overview-filter="all">Show all ' +
+        items.length +
+        " election" +
+        (items.length === 1 ? "" : "s") +
+        "</button></li>";
+      return;
+    }
+    list.innerHTML = shown
+      .map(({ row, view, next }) => {
+        const id = electionIdOf(row);
+        const civic = isCivicVoteRow(row);
+        const roll = civic && view && view.l1 ? Number(view.rollSynced || 0) + " on L1 roll" : Number(row.eligibleCount ?? row.participantCount ?? 0) + " on roll";
+        const facts = [
+          civic ? "Civic vote (L1)" : "Poll (this Node)",
+          "Opens " + fmtWhen(row.startTime),
+          "Closes " + fmtWhen(row.cutoffTime),
+          roll,
+          Number(row.acceptedBallots || 0) + " ballots disclosed",
+        ];
+        const cta = next.section
+          ? `<button class="btn${next.tone === "urgent" || next.tone === "action" ? "" : " btn-secondary"}" type="button" data-goto-section="${esc(next.section)}" data-goto-election="${esc(id)}">${esc(next.cta || "Open")}</button>`
+          : "";
+        return `<li class="overview-item" data-tone="${esc(next.tone)}">
+          <div class="ov-head"><h3>${esc(row.title || id)}</h3><span class="ov-stage">${esc(next.stage)}</span></div>
+          <ul class="ov-facts">${facts.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
+          <p class="ov-next"><strong>Next:</strong> ${esc(next.text)}</p>
+          <div class="actions">${cta}<a class="btn btn-secondary" href="/elections/${encodeURIComponent(id)}/results">Results page</a></div>
+        </li>`;
+      })
+      .join("");
+  }
+
+  function updateSectionBadge(count) {
+    const link = document.querySelector('#bo-sections a[href="#overview"]');
+    if (!link) return;
+    let badge = link.querySelector(".count");
+    if (!count) {
+      if (badge) badge.remove();
+      link.removeAttribute("aria-label");
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "count";
+      badge.setAttribute("aria-hidden", "true");
+      link.appendChild(badge);
+    }
+    badge.textContent = String(count);
+    link.setAttribute("aria-label", "Overview, " + count + " need" + (count === 1 ? "s" : "") + " action");
+  }
+
+  // ---- One back-office section at a time. #hash picks it; "Show all" restores the long page.
+  const SECTION_IDS = ["overview", "clerk", "registrar", "person", "disqualify", "tally", "notices"];
+  let showAllSections = false;
+
+  function showSection(id, { focus = false } = {}) {
+    if (!SECTION_IDS.includes(id)) id = "overview";
+    for (const sid of SECTION_IDS) {
+      const panel = $(sid);
+      if (panel) panel.hidden = !showAllSections && sid !== id;
+    }
+    for (const a of document.querySelectorAll("#bo-sections a[href^='#']")) {
+      const on = a.getAttribute("href") === "#" + id;
+      a.classList.toggle("active", on);
+      if (on) a.setAttribute("aria-current", "true");
+      else a.removeAttribute("aria-current");
+    }
+    const panel = $(id);
+    if (focus && panel) {
+      const heading = panel.querySelector("h2");
+      if (heading) {
+        heading.setAttribute("tabindex", "-1");
+        heading.focus({ preventScroll: true });
+      }
+      panel.scrollIntoView({ block: "start" });
+    }
+  }
+
+  function setSelectValue(selectId, value) {
+    const sel = $(selectId);
+    if (!sel || ![...sel.options].some((o) => o.value === value)) return false;
+    sel.value = value;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  /** Overview button → open the section with that election already picked. */
+  function gotoSection(section, electionId) {
+    if (electionId) {
+      if (section === "clerk") setSelectValue("f-election", electionId);
+      if (section === "registrar") {
+        setSelectValue("r-election", electionId);
+        setSelectValue("rr-election", electionId);
+      }
+      if (section === "tally") setSelectValue("t-election", electionId);
+      if (section === "disqualify") setSelectValue("d-election", electionId);
+    }
+    if (location.hash !== "#" + section) history.pushState(null, "", "#" + section);
+    showSection(section, { focus: true });
+    if (section === "clerk" && electionId) {
+      const freeze = $("form-freeze");
+      if (freeze) freeze.scrollIntoView({ block: "center" });
+    }
+  }
+
+  function wireSections() {
+    const nav = $("bo-sections");
+    if (!nav) return;
+    const all = document.createElement("button");
+    all.type = "button";
+    all.className = "btn btn-secondary bo-show-all";
+    all.setAttribute("aria-pressed", "false");
+    all.textContent = "Show all sections";
+    all.addEventListener("click", () => {
+      showAllSections = !showAllSections;
+      all.setAttribute("aria-pressed", String(showAllSections));
+      all.textContent = showAllSections ? "One section at a time" : "Show all sections";
+      showSection((location.hash || "#overview").slice(1));
+    });
+    nav.appendChild(all);
+    nav.addEventListener("click", (event) => {
+      const a = event.target.closest("a[href^='#']");
+      if (!a) return;
+      event.preventDefault();
+      const id = a.getAttribute("href").slice(1);
+      history.pushState(null, "", "#" + id);
+      showSection(id, { focus: true });
+    });
+    window.addEventListener("hashchange", () => showSection((location.hash || "#overview").slice(1)));
+    window.addEventListener("popstate", () => showSection((location.hash || "#overview").slice(1)));
+    document.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-goto-section]");
+      if (btn) {
+        event.preventDefault();
+        gotoSection(btn.getAttribute("data-goto-section"), btn.getAttribute("data-goto-election") || "");
+        return;
+      }
+      const filter = event.target.closest("[data-overview-filter]");
+      if (filter) {
+        overviewFilter = filter.getAttribute("data-overview-filter");
+        for (const b of document.querySelectorAll(".overview-filters [data-overview-filter]")) {
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-overview-filter") === overviewFilter));
+        }
+        renderOverview();
+      }
+    });
+    if ($("btn-refresh-overview")) $("btn-refresh-overview").addEventListener("click", () => loadElections());
+    showSection((location.hash || "#overview").slice(1));
+  }
+
   async function loadElections() {
     try {
       const data = await request("/api/elections");
       const rows = asList(data, ["elections", "items"]);
+      electionRows.clear();
+      for (const row of rows) electionRows.set(String(electionIdOf(row)), row);
       const selects = [$("r-election"), $("d-election"), $("t-election"), $("rr-election")];
       for (const sel of selects) {
         if (sel) fillSelect(sel, rows, electionIdOf, electionLabel);
@@ -1146,6 +1352,7 @@
       if (rows[0]) wireExplorerLinks(electionIdOf(rows[0]));
       await loadRegistrationRequests();
       await loadCredentials();
+      await renderOverview().catch(() => {});
     } catch (err) {
       for (const id of ["f-election", "r-election", "d-election", "t-election", "rr-election"]) {
         if ($(id)) $(id).innerHTML = `<option value="">${esc(errText(err))}</option>`;
@@ -1305,10 +1512,21 @@
       flash($("flash-election"), "err", err.message);
       return;
     }
-    if (!(startTime < cutoffTime)) {
-      flash($("flash-election"), "err", "Start must be before cutoff.");
+    const check = globalThis.ZkVotingNextStep
+      ? globalThis.ZkVotingNextStep.checkNewElection({
+          civic: String(selectedElectionType()) === "1",
+          startTime,
+          cutoffTime,
+          questions,
+        })
+      : startTime < cutoffTime
+        ? []
+        : ["Start must be before cutoff."];
+    if (check.length) {
+      flash($("flash-election"), "err", check.join(" "));
       return;
     }
+    const createWarning = (check.warnings || []).join(" ");
     const body = {
       title: $("e-title").value.trim(),
       metadataURI: $("e-uri").value.trim(),
@@ -1347,8 +1565,9 @@
         "ok",
         bits.join(" · ") +
           (isVote
-            ? ". A civic vote runs on L1: set it up under Civic vote on L1 (guardians, then publish)."
-            : ". Freeze the roll before opening.")
+            ? ". Next: enroll guardians and publish it to L1 under Guardians and tally, before it starts."
+            : ". Next: add voters, then freeze the roll before voting opens.") +
+          (createWarning ? " " + createWarning : "")
       );
       if (id) {
         $("e-load").value = String(id);
@@ -1406,9 +1625,25 @@
       flash($("flash-freeze"), "err", "Choose an election.");
       return;
     }
+    const row = electionRows.get(String(id));
+    const title = row ? row.title || id : id;
+    const onRoll = row ? Number(row.eligibleCount ?? row.participantCount ?? 0) : null;
+    const ask =
+      "Freeze the roll for \"" +
+      title +
+      "\"?" +
+      (onRoll != null ? "\n\n" + onRoll + " voter" + (onRoll === 1 ? " is" : "s are") + " on the roll." : "") +
+      "\nAfter freezing, nobody can be added or removed. Voting opens at the scheduled start." +
+      (onRoll === 0 ? "\n\nThe roll is EMPTY: nobody will be able to vote." : "");
+    if (typeof window.confirm === "function" && !window.confirm(ask)) return;
     try {
       await request("/api/elections/" + encodeURIComponent(id) + "/freeze", { method: "POST", body: {} });
-      flash($("flash-freeze"), "ok", "Roll frozen for election " + id);
+      const started = row && Number(row.startTime) <= Math.floor(Date.now() / 1000);
+      flash(
+        $("flash-freeze"),
+        "ok",
+        "Roll frozen for \"" + title + "\". " + (started ? "Voting is open now." : "Voting opens at the scheduled start.")
+      );
       await loadElections();
     } catch (err) {
       flash($("flash-freeze"), "err", errText(err));
@@ -1833,6 +2068,50 @@
     return `<ul class="meta-list">${facts}</ul>${rows ? `<h3>Guardians</h3><ul class="meta-list">${rows}</ul>` : ""}`;
   }
 
+  /**
+   * Which rollup buttons the contract can accept right now. A button the contract would
+   * revert in this status is disabled, and the suggested next action is highlighted.
+   * Times are only used for the hint; L1 has the final word on the clock.
+   */
+  const RU_ALLOWED = {
+    publish: (st) => st === "draft",
+    "finalize-key": (st) => st === "keygen",
+    "roll/sync": (st) => st === "scheduled",
+    close: (st) => st === "scheduled",
+    finalize: (st) => st === "closed",
+  };
+
+  function syncRollupButtons(id, view) {
+    const bar = $("ru-actions");
+    if (!bar) return;
+    const status = view && view.l1 ? String(view.l1.status || "") : "draft";
+    const helper = globalThis.ZkVotingNextStep;
+    const row = electionRows.get(String(id));
+    const next = helper && row ? helper.nextStep(row, view) : null;
+    for (const btn of bar.querySelectorAll("[data-ru-action]")) {
+      const action = btn.getAttribute("data-ru-action");
+      const connected = !(view && view.enabled === false);
+      const allowed = connected && (RU_ALLOWED[action] ? RU_ALLOWED[action](status) : true);
+      btn.disabled = !allowed;
+      btn.classList.toggle("recommended", Boolean(next && next.action === action && allowed));
+      btn.title = allowed
+        ? ""
+        : !connected
+          ? "This node is not connected to the rollup (ROLLUP_ADDRESS, L1_RPC)."
+          : status === "draft"
+            ? "Not possible until the vote is published to L1."
+            : "Not possible while the vote is " + status + " on L1.";
+    }
+    let hint = $("ru-next");
+    if (!hint) {
+      hint = document.createElement("p");
+      hint.id = "ru-next";
+      hint.className = "field-hint";
+      bar.parentNode.insertBefore(hint, bar);
+    }
+    hint.textContent = next ? "Next: " + next.text : "";
+  }
+
   async function loadRollup() {
     const id = electionKinds.get(String($("t-election").value)) === "civic" ? $("t-election").value : "";
     const host = $("ru-status");
@@ -1844,6 +2123,7 @@
     try {
       const view = await request("/api/elections/" + encodeURIComponent(id) + "/rollup");
       host.innerHTML = rollupStatusHtml(view);
+      syncRollupButtons(id, view);
       if (view.threshold) $("ru-threshold").value = view.threshold;
       if (view.minBallots) $("ru-min-ballots").value = view.minBallots;
     } catch (err) {
@@ -1864,6 +2144,7 @@
       flash($("flash-rollup"), "err", errText(err));
     }
     await loadRollup();
+    await renderOverview();
   }
 
   const ROLLUP_ACTION_TEXT = {
@@ -2023,6 +2304,7 @@
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications()]);
   });
   (async function init() {
+    wireSections();
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);
     noteErc20Deployment();

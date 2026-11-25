@@ -1,0 +1,60 @@
+{
+  "$comment": "NOT FOR PROFIT — civic public good. The networks the first-run setup screen (/setup) offers for civic votes, and the one shared ZkVotingRollup on each. A fork inherits this file and picks up new deployments by merging upstream. Change an address only from the project's official announcement (see the root README, 'Canonical contract address'). Every L2 settles on the same audited contract; a fork never deploys its own on a public network.",
+  "version": 1,
+  "networks": [
+    {
+      "id": "local-test",
+      "name": "Built-in test chain",
+      "chainId": 31337,
+      "kind": "test",
+      "builtIn": true,
+      "summary": "A private Ethereum test chain that runs inside this deployment. Free, nothing to sign up for, nothing of value at stake. Use it to learn the system and run practice elections.",
+      "civicVotes": { "available": true, "note": "Runs with a stand-in batch verifier that the contract accepts only on this chain id." },
+      "rollup": { "address": "deployment-file", "deployBlock": 0 },
+      "explorer": null,
+      "rpcHints": [],
+      "faucet": null,
+      "joinPolicy": "automatic"
+    },
+    {
+      "id": "sepolia",
+      "name": "Ethereum Sepolia (public test network)",
+      "chainId": 11155111,
+      "kind": "test",
+      "builtIn": false,
+      "summary": "Ethereum's public test network. Test ETH is free from a faucet and has no value. Use it to rehearse with other organisations before mainnet.",
+      "civicVotes": {
+        "available": false,
+        "note": "Not available yet. The shared ZkVotingRollup is not deployed on Sepolia: it needs the batch validity circuit (docs/proposals/batch-validity-circuit.md) and its trusted-setup ceremony first."
+      },
+      "rollup": { "address": null, "deployBlock": null },
+      "explorer": "https://sepolia.etherscan.io",
+      "rpcHints": [
+        "Get a free RPC URL for Sepolia from any Ethereum node provider; paste the https:// URL they give you.",
+        "Public endpoints such as https://ethereum-sepolia-rpc.publicnode.com work for trying things out, but are rate-limited."
+      ],
+      "faucet": "https://cloud.google.com/application/web3/faucet/ethereum/sepolia",
+      "joinPolicy": "governor-approval"
+    },
+    {
+      "id": "mainnet",
+      "name": "Ethereum mainnet",
+      "chainId": 1,
+      "kind": "production",
+      "builtIn": false,
+      "summary": "Real elections. Every L2 settles on the one audited ZkVotingRollup. Your node pays real ETH for gas; voters never pay.",
+      "civicVotes": {
+        "available": false,
+        "note": "Not available yet. The audited shared ZkVotingRollup is not deployed on mainnet (root README, 'Canonical contract address')."
+      },
+      "rollup": { "address": null, "deployBlock": null },
+      "explorer": "https://etherscan.io",
+      "rpcHints": [
+        "Use an RPC URL from an Ethereum node provider you trust, or your own node. Paste the https:// URL.",
+        "Avoid free public endpoints for a real election: they are rate-limited and you cannot rely on them on election day."
+      ],
+      "faucet": null,
+      "joinPolicy": "governor-approval"
+    }
+  ]
+}
